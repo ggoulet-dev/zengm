@@ -33,9 +33,15 @@ type PlayByPlayEventInputScore =
 
 type PlayByPlayEventInput =
 	| {
-			type: "quarter" | "overtime";
+			type: "quarter";
 			quarter: number;
 			clock: number;
+	  }
+	| {
+			type: "overtime";
+			quarter: number;
+			clock: number;
+			threeOnThree: boolean;
 	  }
 	| {
 			type: "gameOver";
@@ -53,6 +59,15 @@ type PlayByPlayEventInput =
 			clock: number;
 			t: TeamNum;
 			names: [string, string];
+	  }
+	| {
+			type: "fight";
+			clock: number;
+
+			// Winner's team and [winner, loser] names/pids
+			t: TeamNum;
+			names: [string, string];
+			pids: [number, number];
 	  }
 	| {
 			type:
@@ -106,6 +121,12 @@ type PlayByPlayEventInput =
 	  }
 	| {
 			type: "noPullGoalie";
+			clock: number;
+			t: TeamNum;
+			name: string;
+	  }
+	| {
+			type: "goalieHook";
 			clock: number;
 			t: TeamNum;
 			name: string;

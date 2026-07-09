@@ -2437,6 +2437,11 @@ const sportSpecificCols = bySport<{
 		},
 	},
 	hockey: {
+		RFA: {
+			desc: "Restricted Free Agent (team holding the rights)",
+			sortType: "string",
+			title: "RFA",
+		},
 		"pos:C": {
 			desc: "Center",
 			sortType: "number",
@@ -3671,19 +3676,19 @@ const cols: {
 		title: "OPOY",
 	},
 	"count:dpoy": {
-		desc: "Defensive Player of the Year",
+		desc: isSport("hockey") ? "Norris Trophy" : "Defensive Player of the Year",
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 		title: "DPOY",
 	},
 	"count:dfoy": {
-		desc: "Defensive Forward of the Year",
+		desc: "Selke Trophy",
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 		title: "DFOY",
 	},
 	"count:goy": {
-		desc: "Goalie of the Year",
+		desc: "Vezina Trophy",
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 		title: "GOY",
@@ -3695,13 +3700,13 @@ const cols: {
 		title: "MIP",
 	},
 	"count:mvp": {
-		desc: "Most Valuable Player",
+		desc: isSport("hockey") ? "Hart Memorial Trophy" : "Most Valuable Player",
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 		title: "MVP",
 	},
 	"count:roy": {
-		desc: "Rookie of the Year",
+		desc: isSport("hockey") ? "Calder Memorial Trophy" : "Rookie of the Year",
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 		title: "ROY",
@@ -3741,31 +3746,33 @@ const cols: {
 		title: "OPOY",
 	},
 	"award:dpoy": {
-		desc: "Defensive Player of the Year",
+		desc: isSport("hockey") ? "Norris Trophy" : "Defensive Player of the Year",
 		title: "DPOY",
 	},
 	"award:dfoy": {
-		desc: "Defensive Forward of the Year",
+		desc: "Selke Trophy",
 		title: "DFOY",
 	},
 	"award:goy": {
-		desc: "Goalie of the Year",
+		desc: "Vezina Trophy",
 		title: "GOY",
 	},
 	"award:finalsMvp": {
-		desc: `${isSport("hockey") ? "Playoffs" : "Finals"} Most Valuable Player`,
-		title: `${isSport("hockey") ? "Playoffs" : "Finals"} MVP`,
+		desc: isSport("hockey")
+			? "Conn Smythe Trophy"
+			: "Finals Most Valuable Player",
+		title: isSport("hockey") ? "Conn Smythe" : "Finals MVP",
 	},
 	"award:mip": {
 		desc: "Most Improved Player",
 		title: "MIP",
 	},
 	"award:mvp": {
-		desc: "Most Valuable Player",
+		desc: isSport("hockey") ? "Hart Memorial Trophy" : "Most Valuable Player",
 		title: "MVP",
 	},
 	"award:roy": {
-		desc: "Rookie of the Year",
+		desc: isSport("hockey") ? "Calder Memorial Trophy" : "Rookie of the Year",
 		title: "ROY",
 	},
 	"award:smoy": {

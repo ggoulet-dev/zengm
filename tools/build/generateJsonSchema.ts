@@ -1419,6 +1419,12 @@ export const generateJsonSchema = (sport: Sport | "test") => {
 					hitFactor: {
 						type: "number",
 					},
+					fightFactor: {
+						type: "number",
+					},
+					rfa: {
+						type: "boolean",
+					},
 					giveawayFactor: {
 						type: "number",
 					},
@@ -1896,6 +1902,9 @@ export const generateJsonSchema = (sport: Sport | "test") => {
 						},
 						ptModifier: {
 							type: "number",
+						},
+						rfaTid: {
+							type: "integer",
 						},
 						ratings: {
 							type: "array",

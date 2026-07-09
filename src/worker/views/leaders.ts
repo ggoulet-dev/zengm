@@ -340,6 +340,9 @@ export const getCategoriesAndStats = (onlyStat?: string) => {
 				stat: "gv",
 			},
 			{
+				stat: "gW",
+			},
+			{
 				stat: "svPct",
 			},
 			{

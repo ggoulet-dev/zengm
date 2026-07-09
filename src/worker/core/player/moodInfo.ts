@@ -6,6 +6,10 @@ import type { Player } from "../../../common/types.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { last } from "../../../common/utils.ts";
 import { uniformSeed } from "../../../common/random.ts";
+import {
+	getRfaRightsTid,
+	RFA_OFFER_SHEET_PREMIUM,
+} from "../freeAgents/rfa.hockey.ts";
 
 const hasActiveNegotiation = async (tid: number, pid: number) => {
 	return (await idb.cache.negotiations.getAll()).some(
@@ -103,6 +107,13 @@ const moodInfo = async (
 		contractAmount *= helpers.bound(1 + (0.5 * -sumComponents) / 10, 1, 1.5);
 	}
 
+	// Hockey RFA: a tendered restricted free agent will negotiate with anyone (the rights team can't be refused, and any other team's deal is an offer sheet), but poaching him costs a premium
+	const rfaRightsTid =
+		p.tid === PLAYER.FREE_AGENT ? getRfaRightsTid(p) : undefined;
+	if (rfaRightsTid !== undefined && tid !== rfaRightsTid) {
+		contractAmount *= RFA_OFFER_SHEET_PREMIUM;
+	}
+
 	contractAmount = helpers.bound(
 		helpers.roundContract(contractAmount),
 		g.get("minContract"),
@@ -114,6 +125,7 @@ const moodInfo = async (
 		!g.get("playersRefuseToNegotiate") ||
 		rookie ||
 		firstSeasonAfterExpansionOverride ||
+		rfaRightsTid !== undefined ||
 		(contractAmount === g.get("minContract") && p.tid === PLAYER.FREE_AGENT)
 	) {
 		probWilling = 1;

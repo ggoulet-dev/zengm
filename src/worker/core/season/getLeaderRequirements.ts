@@ -548,6 +548,7 @@ const getLeaderRequirements = () => {
 				minStats: { sv: 800 },
 				sortAscending: true,
 			},
+			gW: {},
 			ga: {},
 			sa: {},
 			sv: {},

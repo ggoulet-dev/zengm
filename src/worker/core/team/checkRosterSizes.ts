@@ -4,9 +4,13 @@ import rosterAutoSort from "./rosterAutoSort.ts";
 import { idb } from "../../db/index.ts";
 import { g, helpers, local } from "../../util/index.ts";
 import type { Player } from "../../../common/types.ts";
-import { KEY_POSITIONS_NEEDED } from "../freeAgents/getBest.ts";
+import {
+	getAiRosterTarget,
+	KEY_POSITIONS_NEEDED,
+} from "../freeAgents/getBest.ts";
+import { getRfaRightsTid } from "../freeAgents/rfa.hockey.ts";
 import { bySport } from "../../../common/sportFunctions.ts";
-import { last } from "../../../common/utils.ts";
+import { last, orderBy } from "../../../common/utils.ts";
 
 export const dropPlayers = async (players: Player[], numToDrop: number) => {
 	// Automatically drop lowest value players until we reach g.get("maxRosterSize")
@@ -195,6 +199,67 @@ const checkRosterSizes = async (
 					numPlayersOnRoster += 1;
 				}
 			}
+		} else if (
+			!userTeamAndActive &&
+			Object.keys(POSITION_COUNTS).length > 0 &&
+			numPlayersOnRoster > getAiRosterTarget() + 3
+		) {
+			// In leagues where maxRosterSize allows far more than a functional roster (like NHL leagues using the 50-contract limit), AI teams accumulate min-contract filler. Trim surplus-position filler back to a functional size.
+			const countsByPos: Record<string, number> = {};
+			const healthyByKeyPos: Record<string, number> = {};
+			for (const p of players) {
+				const pos = last(p.ratings).pos;
+				countsByPos[pos] = (countsByPos[pos] ?? 0) + 1;
+				if (
+					KEY_POSITIONS_NEEDED?.[pos] !== undefined &&
+					p.injury.gamesRemaining === 0
+				) {
+					healthyByKeyPos[pos] = (healthyByKeyPos[pos] ?? 0) + 1;
+				}
+			}
+
+			const droppable = orderBy(
+				players.filter((p) => p.contract.amount <= g.get("minContract")),
+				"value",
+				"asc",
+			);
+
+			let numToDrop = numPlayersOnRoster - getAiRosterTarget();
+			for (const p of droppable) {
+				if (numToDrop <= 0) {
+					break;
+				}
+
+				// Only drop from positions with more players than POSITION_COUNTS calls for
+				const pos = last(p.ratings).pos;
+				if (
+					POSITION_COUNTS[pos] === undefined ||
+					(countsByPos[pos] ?? 0) <= Math.ceil(POSITION_COUNTS[pos])
+				) {
+					continue;
+				}
+
+				// Like dropPlayers, never release a healthy player at a key position (e.g. goalie) if it would leave too few healthy ones
+				const keyNeeded = KEY_POSITIONS_NEEDED?.[pos];
+				if (
+					keyNeeded !== undefined &&
+					p.injury.gamesRemaining === 0 &&
+					(healthyByKeyPos[pos] ?? 0) <= keyNeeded
+				) {
+					continue;
+				}
+
+				await player.release(p, false);
+				releasedPIDs.push(p.pid);
+				countsByPos[pos]! -= 1;
+				if (
+					KEY_POSITIONS_NEEDED?.[pos] !== undefined &&
+					p.injury.gamesRemaining === 0
+				) {
+					healthyByKeyPos[pos]! -= 1;
+				}
+				numToDrop -= 1;
+			}
 		}
 
 		// Auto sort rosters (except player's team)
@@ -212,7 +277,11 @@ const checkRosterSizes = async (
 
 	// List of free agents looking for minimum contracts, sorted by value. This is used to bump teams up to the minimum roster size.
 	for (const p of players) {
-		if (p.contract.amount === g.get("minContract")) {
+		// Hockey RFA: tendered RFAs are not available as roster filler, their rights team re-signs them
+		if (
+			p.contract.amount === g.get("minContract") &&
+			getRfaRightsTid(p) === undefined
+		) {
 			minFreeAgents.push(p);
 		}
 	}

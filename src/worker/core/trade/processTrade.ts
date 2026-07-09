@@ -9,6 +9,7 @@ import {
 	updatePlayMenu,
 } from "../../util/index.ts";
 import { type Player, type TradeEventTeams } from "../../../common/types.ts";
+import { isSport } from "../../../common/sportFunctions.ts";
 import { getTeammateJerseyNumbers } from "../player/genJerseyNumber.ts";
 import { recomputeLocalUITeamOvrs } from "../../util/recomputeLocalUITeamOvrs.ts";
 
@@ -52,7 +53,11 @@ const processTrade = async (
 		for (const p of players) {
 			p.tid = tids[k];
 
-			// p.gamesUntilTradable = 14; // Don't make traded players untradable
+			if (isSport("hockey") && duringSeason) {
+				// Cooldown before a just-acquired player can be traded again, so teams don't instantly flip players. Same scaling as in player/sign.ts - 14 games for an 82 game season. In-season only: the counter only decrements on game days, so an off-season trade would otherwise lock the player into the next season.
+				p.gamesUntilTradable = Math.round(0.17 * g.get("numGames"));
+			}
+
 			p.ptModifier = 1; // Reset
 
 			if (duringSeason) {

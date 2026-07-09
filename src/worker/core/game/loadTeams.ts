@@ -10,6 +10,7 @@ import {
 import playThroughInjuriesFactor from "../../../common/playThroughInjuriesFactor.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { last } from "../../../common/utils.ts";
+import { getEffectivePlayThroughInjuries } from "./suspension.hockey.ts";
 
 const MAX_NUM_PLAYERS_PACE = 7;
 
@@ -200,6 +201,12 @@ export const processTeam = async (
 	let game6EliminationGameOrGame7: boolean | undefined;
 
 	for (const p of players) {
+		// Hockey suspensions can never be played through, this is playThroughInjuries otherwise
+		const playThroughInjuriesPlayer = getEffectivePlayThroughInjuries(
+			p.injury,
+			playThroughInjuries,
+		);
+
 		const injuryFactor = playThroughInjuriesFactor(p.injury.gamesRemaining);
 
 		// p.jerseyNumber fallback is for exhibition game players for the current season with no stats
@@ -222,9 +229,9 @@ export const processTeam = async (
 				...p.injury,
 				playingThrough:
 					p.injury.gamesRemaining > 0 &&
-					p.injury.gamesRemaining <= playThroughInjuries,
+					p.injury.gamesRemaining <= playThroughInjuriesPlayer,
 			},
-			injured: p.injury.gamesRemaining > playThroughInjuries,
+			injured: p.injury.gamesRemaining > playThroughInjuriesPlayer,
 			jerseyNumber,
 			ptModifier: p.ptModifier,
 			ovrs: rating.ovrs,

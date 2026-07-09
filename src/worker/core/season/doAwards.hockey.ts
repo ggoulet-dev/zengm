@@ -169,11 +169,11 @@ const doAwards = async (conditions: Conditions) => {
 	const { bestRecord, bestRecordConfs } = await teamAwards(teams);
 	const categories = [
 		{
-			name: "League Points Leader",
+			name: "Art Ross Trophy",
 			stat: "pts",
 		},
 		{
-			name: "League Goals Leader",
+			name: "Maurice Richard Trophy",
 			stat: "g",
 		},
 		{
@@ -183,9 +183,12 @@ const doAwards = async (conditions: Conditions) => {
 	];
 	await leagueLeaders(players, categories, awardsByPlayer);
 
+	// The Norris Trophy goes to the best defenseman specifically (not just the best defensive
+	// player), so restrict the candidate pool to D - otherwise a two-way center could win it.
 	const dpoyPlayers = getTopPlayers(
 		{
 			amount: 1,
+			filter: (p) => p.pos === "D",
 			score: dpoyScore,
 		},
 		players,

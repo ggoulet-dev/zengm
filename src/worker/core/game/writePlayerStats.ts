@@ -10,10 +10,44 @@ import getWinner from "../../../common/getWinner.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { randInt } from "../../../common/random.ts";
 import { processPlayerStats } from "../../util/processPlayerStats.ts";
+import { applySuspension, rollSuspensionGames } from "./suspension.hockey.ts";
+import { getActualPlayThroughInjuries } from "./loadTeams.ts";
 
 export const P_FATIGUE_DAILY_REDUCTION = 20;
 
 const gameOrWeek = bySport({ default: "game", football: "week" });
+
+// Hockey only. NHL goalie decision rule: the winning team's W goes to the goalie who was in net when
+// the game-winning goal (the winner's (loser's final total + 1)-th goal) was scored, and the losing
+// team's L to the goalie who allowed it. A shootout decision goes to whoever was in net for the
+// shootout. Returns undefined (caller falls back to most saves) when the data is absent (old replays)
+// or the net was empty at the decisive goal.
+export const getHockeyGoalieDecisionPid = (
+	result: GameResults,
+	i: number,
+	winner: 0 | 1,
+): number | undefined => {
+	if (result.team[0].stat.pts === result.team[1].stat.pts) {
+		// Decided by shootout
+		return result.shootoutGoaliePids?.[i];
+	}
+
+	const goaliesAtGoals = result.goaliesAtGoals as
+		| {
+				t: 0 | 1;
+				goaliePids: [number | undefined, number | undefined];
+		  }[]
+		| undefined;
+	if (!goaliesAtGoals) {
+		return undefined;
+	}
+
+	const loser = winner === 0 ? 1 : 0;
+	const decisiveGoal = goaliesAtGoals.filter((goal) => goal.t === winner)[
+		result.team[loser].stat.pts
+	];
+	return decisiveGoal?.goaliePids[i];
+};
 
 const doInjury = async (
 	p: any,
@@ -237,6 +271,19 @@ const writePlayerStats = async (
 	for (const result of results) {
 		const allStarGame = result.team[0].id === -1 && result.team[1].id === -2;
 
+		// Hockey only - major penalties can draw supplemental discipline (suspensions)
+		const majorPenaltiesByPid = new Map<number, string[]>();
+		if (isSport("hockey") && result.majorPenalties) {
+			for (const majorPenalty of result.majorPenalties) {
+				const names = majorPenaltiesByPid.get(majorPenalty.pid);
+				if (names) {
+					names.push(majorPenalty.name);
+				} else {
+					majorPenaltiesByPid.set(majorPenalty.pid, [majorPenalty.name]);
+				}
+			}
+		}
+
 		const winner = getWinner([result.team[0].stat, result.team[1].stat]);
 
 		const qbgResults = new Map<number, "W" | "L" | "OTL" | "T">();
@@ -253,6 +300,14 @@ const writePlayerStats = async (
 					if (p.stat[stat] > maxStat) {
 						id = p.id;
 						maxStat = p.stat[stat];
+					}
+				}
+
+				if (isSport("hockey") && (winner === 0 || winner === 1)) {
+					// The goalie of record for the decisive goal overrides the most-saves fallback
+					const decisionPid = getHockeyGoalieDecisionPid(result, i, winner);
+					if (decisionPid !== undefined) {
+						id = decisionPid;
 					}
 				}
 
@@ -511,6 +566,77 @@ const writePlayerStats = async (
 					if (output.stopPlay && !stopPlay) {
 						await lock.set("stopGameSim", true);
 						stopPlay = true;
+					}
+				}
+
+				// Hockey only - roll a suspension for each major penalty this player took. Must be after doInjury, so a real injury from the same game can take precedence if it keeps the player out anyway.
+				if (isSport("hockey")) {
+					const majorPenaltyNames = majorPenaltiesByPid.get(p.id);
+					if (majorPenaltyNames) {
+						let gamesSuspended: number | undefined;
+						let suspensionPenaltyName: string | undefined;
+						for (const name of majorPenaltyNames) {
+							const games = rollSuspensionGames(name);
+							if (
+								games !== undefined &&
+								(gamesSuspended === undefined || games > gamesSuspended)
+							) {
+								gamesSuspended = games;
+								suspensionPenaltyName = name;
+							}
+						}
+
+						if (gamesSuspended !== undefined) {
+							// Multi-game suspensions are mildly newsworthy, single games are not
+							const score = gamesSuspended > 1 ? 10 : 0;
+
+							// A concurrent real injury only excuses the suspension if it actually keeps the player out, which depends on the team's play-through-injuries cutoff
+							const teamRecord = allStarGame
+								? undefined
+								: await idb.cache.teams.get(t.id);
+							const playThroughInjuries = getActualPlayThroughInjuries(
+								teamRecord ?? "default",
+							)[playoffs ? 1 : 0];
+
+							applySuspension(
+								p,
+								p2,
+								gamesSuspended,
+								g.get("season"),
+								playThroughInjuries,
+								score,
+							);
+
+							const suspensionText = `${p.pos} <a href="${helpers.leagueUrl([
+								"player",
+								p2.pid,
+							])}">${p2.firstName} ${p2.lastName}</a> - Suspension, ${gamesSuspended} ${
+								gamesSuspended === 1 ? gameOrWeek : `${gameOrWeek}s`
+							}`;
+
+							if (g.get("userTid") === p2.tid && gamesSuspended > 1) {
+								injuryTexts.push(suspensionText);
+							}
+
+							logEvent(
+								{
+									type: "injured",
+									text: `${p.pos} <a href="${helpers.leagueUrl([
+										"player",
+										p2.pid,
+									])}">${p2.firstName} ${
+										p2.lastName
+									}</a> was suspended for ${gamesSuspended} ${
+										gamesSuspended === 1 ? gameOrWeek : `${gameOrWeek}s`
+									} (${suspensionPenaltyName})`,
+									showNotification: false,
+									pids: [p2.pid],
+									tids: [p2.tid],
+									score,
+								},
+								conditions,
+							);
+						}
 					}
 				}
 

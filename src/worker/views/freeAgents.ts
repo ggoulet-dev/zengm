@@ -12,6 +12,7 @@ import { g } from "../util/index.ts";
 import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { loadAbbrevs } from "./gameLog.ts";
 import { bySport } from "../../common/sportFunctions.ts";
+import { getRfaRightsTid, rfaEnabled } from "../core/freeAgents/rfa.hockey.ts";
 
 export const addMood = async (players: Player[]) => {
 	const moods: Awaited<ReturnType<(typeof player)["moodInfos"]>>[] = [];
@@ -116,6 +117,9 @@ const getPlayers = async (
 					return {
 						...p,
 						freeAgentType: "available",
+
+						// Normalize to the effective rights (undefined once the player ages out of RFA eligibility)
+						rfaTid: getRfaRightsTid(p),
 					};
 				}),
 			)),
@@ -173,6 +177,7 @@ const updateFreeAgents = async (
 					// Added in getPlayers
 					"freeAgentType",
 					"freeAgentTransaction",
+					"rfaTid",
 				],
 				ratings: ["ovr", "pot", "skills", "pos"],
 				stats: freeAgentStats,
@@ -189,6 +194,9 @@ const updateFreeAgents = async (
 		for (const p of players) {
 			if (p.freeAgentType === "available") {
 				p.contract.amount = p.mood.user.contractAmount / 1000;
+				if (p.rfaTid !== undefined) {
+					p.rfaAbbrev = g.get("teamInfoCache")[p.rfaTid]?.abbrev;
+				}
 			} else {
 				let event;
 				if (p.freeAgentTransaction.eid !== undefined) {
@@ -236,6 +244,7 @@ const updateFreeAgents = async (
 			numRosterSpots: g.get("maxRosterSize") - userPlayers.length,
 			payroll: payroll / 1000,
 			players,
+			rfa: rfaEnabled() && season === "current",
 			season,
 			stats: freeAgentStats,
 			type,

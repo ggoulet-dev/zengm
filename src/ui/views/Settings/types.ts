@@ -138,6 +138,8 @@ export type Key =
 	| "fourthDownFactor"
 	| "onsideFactor"
 	| "onsideRecoveryFactor"
+	| "fightFactor"
+	| "rfa"
 	| "giveawayFactor"
 	| "takeawayFactor"
 	| "blockFactor"

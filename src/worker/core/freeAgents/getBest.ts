@@ -1,6 +1,9 @@
 import { g } from "../../util/index.ts";
 import type { PlayerWithoutKey } from "../../../common/types.ts";
-import { DRAFT_BY_TEAM_OVR } from "../../../common/constants.ts";
+import {
+	DRAFT_BY_TEAM_OVR,
+	POSITION_COUNTS,
+} from "../../../common/constants.ts";
 import { getTeamOvrDiffs } from "../draft/runPicks.ts";
 import { last, orderBy } from "../../../common/utils.ts";
 import { bySport } from "../../../common/sportFunctions.ts";
@@ -15,6 +18,24 @@ export const KEY_POSITIONS_NEEDED = bySport<Record<string, number> | undefined>(
 	},
 );
 
+// How many players the AI should actually roster. In leagues where maxRosterSize is much larger than a functional roster (like NHL leagues using the 50-contract limit), filling all the way to maxRosterSize just hoards fungible players, so stop once a full lineup plus a couple spares is covered.
+export const getAiRosterTarget = () => {
+	const maxRosterSize = g.get("maxRosterSize");
+
+	let positionCountsTotal = 0;
+	for (const count of Object.values(POSITION_COUNTS)) {
+		positionCountsTotal += count;
+	}
+	if (positionCountsTotal === 0) {
+		return maxRosterSize - 2;
+	}
+
+	return Math.min(
+		maxRosterSize - 2,
+		Math.max(Math.round(positionCountsTotal) + 2, g.get("minRosterSize") + 2),
+	);
+};
+
 // Find the best available free agent for a team.
 // playersAvailable should be sorted - best players first, worst players last.
 // If payroll is not supplied, don't do salary cap check (like when creating new league).
@@ -23,11 +44,22 @@ const getBest = <T extends PlayerWithoutKey>(
 	playersAvailable: T[],
 	payroll?: number,
 ): T | void => {
-	const maxRosterSize = g.get("maxRosterSize");
 	const minContract = g.get("minContract");
 	const salaryCap = g.get("salaryCap");
 	const salaryCapType = g.get("salaryCapType");
 	const numActiveTeams = g.get("numActiveTeams");
+
+	const aiRosterTarget = getAiRosterTarget();
+
+	// Position counts of the current roster, to keep min-contract filler from stacking one position (like 11 centers when POSITION_COUNTS says 5)
+	let positionCountsRoster: Record<string, number> | undefined;
+	if (Object.keys(POSITION_COUNTS).length > 0) {
+		positionCountsRoster = {};
+		for (const p of playersOnRoster) {
+			const pos = last(p.ratings).pos;
+			positionCountsRoster[pos] = (positionCountsRoster[pos] ?? 0) + 1;
+		}
+	}
 
 	let playersSorted: T[];
 	if (DRAFT_BY_TEAM_OVR) {
@@ -114,12 +146,22 @@ const getBest = <T extends PlayerWithoutKey>(
 			skipSalaryCapCheck ||
 			p.contract.amount + payroll <= salaryCap;
 
+		// A position is full for filler purposes once the roster covers its POSITION_COUNTS share
+		const pos = last(p.ratings).pos;
+		const positionFull =
+			positionCountsRoster !== undefined &&
+			POSITION_COUNTS[pos] !== undefined &&
+			(positionCountsRoster[pos] ?? 0) >= Math.ceil(POSITION_COUNTS[pos]);
+
 		// Don't sign minimum contract players to fill out the roster
 		const shouldAddPlayerNormal =
-			salaryCapCheck && p.contract.amount > minContract;
+			salaryCapCheck &&
+			p.contract.amount > minContract &&
+			playersOnRoster.length < aiRosterTarget + 3;
 		const shouldAddPlayerMinContract =
 			p.contract.amount <= minContract &&
-			playersOnRoster.length < maxRosterSize - 2;
+			playersOnRoster.length < aiRosterTarget &&
+			!positionFull;
 
 		// If none of the other checks were true and we can afford this player and it's at a position we have nobody at (like hockey goalie), go for it
 		const shouldAddPlayerPosition =
@@ -127,7 +169,7 @@ const getBest = <T extends PlayerWithoutKey>(
 			!shouldAddPlayerNormal &&
 			!shouldAddPlayerMinContract &&
 			(salaryCapCheck || p.contract.amount <= minContract) &&
-			getKeyPositionsNeeded()?.has(last(p.ratings).pos);
+			getKeyPositionsNeeded()?.has(pos);
 
 		if (
 			shouldAddPlayerNormal ||

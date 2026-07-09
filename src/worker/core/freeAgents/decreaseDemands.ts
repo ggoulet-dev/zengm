@@ -1,6 +1,7 @@
 import { PHASE, PLAYER } from "../../../common/constants.ts";
 import { idb } from "../../db/index.ts";
 import { g, helpers } from "../../util/index.ts";
+import { getRfaRightsTid } from "./rfa.hockey.ts";
 
 /**
  * Decrease contract demands for all free agents.
@@ -23,33 +24,38 @@ const decreaseDemands = async () => {
 		(g.get("phase") <= PHASE.PLAYOFFS ? -1 : 0);
 
 	for (const p of players) {
-		const baseAmount = 50 * Math.sqrt(g.get("maxContract") / 20000);
+		// Hockey RFA: a tendered restricted free agent has no pressure to lower his asking price - he already accepted a bridge discount and nobody else can sign him outright
+		const tenderedRfa = getRfaRightsTid(p) !== undefined;
 
-		// 82 is purposely not defaultGameAttributes.numGames so it works across basketball and football
-		const factor =
-			g.get("phase") !== PHASE.FREE_AGENCY ? 82 / g.get("numGames") : 1;
-		p.contract.amount -= helpers.bound(
-			baseAmount * factor,
-			baseAmount,
-			Infinity,
-		);
-		p.contract.amount = helpers.roundContract(p.contract.amount);
+		if (!tenderedRfa) {
+			const baseAmount = 50 * Math.sqrt(g.get("maxContract") / 20000);
 
-		if (p.contract.amount < minContract) {
-			p.contract.amount = minContract;
-		}
+			// 82 is purposely not defaultGameAttributes.numGames so it works across basketball and football
+			const factor =
+				g.get("phase") !== PHASE.FREE_AGENCY ? 82 / g.get("numGames") : 1;
+			p.contract.amount -= helpers.bound(
+				baseAmount * factor,
+				baseAmount,
+				Infinity,
+			);
+			p.contract.amount = helpers.roundContract(p.contract.amount);
 
-		if (g.get("phase") !== PHASE.FREE_AGENCY) {
-			// Since this is after the season has already started, ask for a short contract
-			if (p.contract.amount < 1.34 * minContract) {
-				p.contract.exp = g.get("season");
-			} else {
-				p.contract.exp = g.get("season") + 1;
+			if (p.contract.amount < minContract) {
+				p.contract.amount = minContract;
 			}
-		}
 
-		if (p.contract.exp < minContractExp) {
-			p.contract.exp = minContractExp;
+			if (g.get("phase") !== PHASE.FREE_AGENCY) {
+				// Since this is after the season has already started, ask for a short contract
+				if (p.contract.amount < 1.34 * minContract) {
+					p.contract.exp = g.get("season");
+				} else {
+					p.contract.exp = g.get("season") + 1;
+				}
+			}
+
+			if (p.contract.exp < minContractExp) {
+				p.contract.exp = minContractExp;
+			}
 		}
 
 		// Free agents' resistance to signing decays after every regular season game

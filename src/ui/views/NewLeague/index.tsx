@@ -295,6 +295,10 @@ type Action =
 			season: number;
 	  }
 	| {
+			type: "setSpectator";
+			spectator: boolean;
+	  }
+	| {
 			type: "setTeams";
 			teams: NewLeagueTeam[];
 			confs: NonEmptyArray<Conf>;
@@ -446,6 +450,15 @@ const reducer = (state: State, action: Action): State => {
 			return {
 				...state,
 				difficulty: helpers.localeParseFloat(action.difficulty),
+			};
+
+		case "setSpectator":
+			return {
+				...state,
+				settings: {
+					...state.settings,
+					spectator: action.spectator,
+				},
 			};
 
 		case "setPhase":
@@ -1527,6 +1540,32 @@ const NewLeague = (props: View<"newLeague">) => {
 								</select>
 								<span className="text-body-secondary">
 									{descriptions.difficulty}
+								</span>
+							</div>
+
+							<div className="mb-3">
+								<div className="form-check form-switch">
+									<input
+										id="new-league-spectator"
+										className="form-check-input"
+										type="checkbox"
+										checked={state.settings.spectator}
+										onChange={(event) => {
+											dispatch({
+												type: "setSpectator",
+												spectator: event.target.checked,
+											});
+										}}
+									/>
+									<label
+										className="form-check-label"
+										htmlFor="new-league-spectator"
+									>
+										Spectator mode
+									</label>
+								</div>
+								<span className="text-body-secondary">
+									{descriptions.spectator}
 								</span>
 							</div>
 

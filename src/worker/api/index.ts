@@ -172,21 +172,29 @@ import { initUILocalGames } from "../util/initUILocalGames.ts";
 import { ValueChangeCalculator } from "../core/team/ValueChangeCalculator.ts";
 import type { GenOrderResult } from "../core/draft/genOrder.ts";
 
-const acceptContractNegotiation = async ({
-	pid,
-	amount,
-	exp,
-}: {
-	pid: number;
-	amount: number;
-	exp: number;
-}) => {
+const acceptContractNegotiation = async (
+	{
+		pid,
+		amount,
+		exp,
+	}: {
+		pid: number;
+		amount: number;
+		exp: number;
+	},
+	conditions: Conditions,
+) => {
 	const negotiation = await contractNegotiation.get(pid);
 	if (typeof negotiation === "string") {
 		return negotiation;
 	}
 
-	const result = await contractNegotiation.accept({ negotiation, amount, exp });
+	const result = await contractNegotiation.accept({
+		negotiation,
+		amount,
+		exp,
+		conditions,
+	});
 
 	if (result === undefined) {
 		// Only do this if there was no error, and don't await because it makes the UI slow
@@ -431,6 +439,18 @@ const beforeView = async (
 };
 
 const cancelContractNegotiation = async (pid: number) => {
+	// Hockey RFA: canceling a re-sign negotiation during the re-sign phase renounces the team's exclusive rights, making the player an unrestricted free agent
+	if (g.get("phase") === PHASE.RESIGN_PLAYERS) {
+		const negotiation = await contractNegotiation.get(pid);
+		if (typeof negotiation !== "string" && negotiation.resigning) {
+			const p = await idb.cache.players.get(pid);
+			if (p && p.rfaTid !== undefined && p.rfaTid === negotiation.tid) {
+				delete p.rfaTid;
+				await idb.cache.players.put(p);
+			}
+		}
+	}
+
 	const result = await contractNegotiation.cancel(pid);
 	await toUI("realtimeUpdate", [["playerMovement"]]);
 	return result;
@@ -4686,6 +4706,7 @@ const upsertCustomizedPlayer = async (
 			p.numDaysFreeAgent = 0;
 			p.gamesUntilTradable = 0;
 			p.ptModifier = 1;
+			delete p.rfaTid;
 		}
 	}
 

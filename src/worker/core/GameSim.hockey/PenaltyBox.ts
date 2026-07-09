@@ -7,6 +7,9 @@ type PenaltyBoxEntry = {
 	penalty: (typeof penalties)[number];
 	minutesLeft: number;
 	ppo: number;
+
+	// Coincidental majors (fights): the player sits the full penalty, but on-ice strength is unaffected, so these entries are excluded from count() and all power play logic
+	coincidental: boolean;
 };
 
 const teamNums: [TeamNum, TeamNum] = [0, 1];
@@ -22,13 +25,19 @@ class PenaltyBox {
 			p: PlayerGameSim;
 			minutesAgo: number;
 			ppo: number;
+			coincidental: boolean;
 		}) => void,
 	) {
 		this.onPenaltyOver = onPenaltyOver;
 		this.players = [[], []];
 	}
 
-	add(t: TeamNum, p: PlayerGameSim, penalty: (typeof penalties)[number]) {
+	add(
+		t: TeamNum,
+		p: PlayerGameSim,
+		penalty: (typeof penalties)[number],
+		coincidental: boolean = false,
+	) {
 		const penaltyType = penaltyTypes[penalty.type];
 
 		this.players[t].push({
@@ -38,11 +47,13 @@ class PenaltyBox {
 
 			// Always initialize at 0, because even if this seems like a power play, there could be an offsetting penalty set immediately after this
 			ppo: 0,
+			coincidental,
 		});
 	}
 
+	// On-ice strength impact only - coincidental sitters are physically in the box (see has) but don't cost their team a skater
 	count(t: TeamNum) {
-		return this.players[t].length;
+		return this.players[t].filter((entry) => !entry.coincidental).length;
 	}
 
 	has(t: TeamNum, p: PlayerGameSim) {
@@ -94,6 +105,11 @@ class PenaltyBox {
 		// Must have been a power play goal!
 
 		for (const entry of this.players[shortHandedTeam]) {
+			// Coincidental penalties don't contribute to the power play, so a PP goal never shortens them
+			if (entry.coincidental) {
+				continue;
+			}
+
 			const penaltyType = penaltyTypes[entry.penalty.type];
 			if (penaltyType.minutesReducedAfterGoal > 0) {
 				entry.minutesLeft -= penaltyType.minutesReducedAfterGoal;
@@ -109,8 +125,8 @@ class PenaltyBox {
 		this.checkIfPenaltiesOver();
 
 		for (const entry of this.players[shortHandedTeam]) {
-			// http://fs.ncaa.org/Docs/stats/Stats_Manuals/IceHockey/2012EZ.pdf - since a major does not expire, after N goals have been scored during that penalty, it counts as N+1 PPO
-			if (entry.penalty.type === "major") {
+			// http://fs.ncaa.org/Docs/stats/Stats_Manuals/IceHockey/2012EZ.pdf - since a major does not expire, after N goals have been scored during that penalty, it counts as N+1 PPO. Coincidental majors never create a power play, so they don't count.
+			if (entry.penalty.type === "major" && !entry.coincidental) {
 				entry.ppo += 1;
 			}
 		}
@@ -123,8 +139,8 @@ class PenaltyBox {
 			for (const entry of this.players[t]) {
 				entry.minutesLeft -= minutes;
 
-				// Some time has passed with an advantage. Track it as a PPO. This would double count two simultaneous penalties, but that would be a very contrived situation in the current game sim code.
-				if (t === shortHandedTeam && entry.ppo === 0) {
+				// Some time has passed with an advantage. Track it as a PPO. This would double count two simultaneous penalties, but that would be a very contrived situation in the current game sim code. Coincidental majors don't cause the advantage, so they never count.
+				if (t === shortHandedTeam && entry.ppo === 0 && !entry.coincidental) {
 					entry.ppo = 1;
 				}
 			}
@@ -145,6 +161,7 @@ class PenaltyBox {
 					p: entry.p,
 					minutesAgo: -entry.minutesLeft,
 					ppo: entry.ppo,
+					coincidental: entry.coincidental,
 				});
 
 				return false;

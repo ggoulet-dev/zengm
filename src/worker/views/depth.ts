@@ -126,8 +126,8 @@ const stats = bySport<Record<string, string[]>>({
 		PR: ["pr", "prYds", "prYdsPerAtt", "prLng", "prTD"],
 	},
 	hockey: {
-		F: ["gp", "amin", "g", "a", "ops", "dps", "ps"],
-		D: ["gp", "amin", "g", "a", "ops", "dps", "ps"],
+		F: ["gp", "amin", "g", "a", "pts", "ops", "dps", "ps"],
+		D: ["gp", "amin", "g", "a", "pts", "ops", "dps", "ps"],
 		G: ["gp", "gaa", "svPct", "gps"],
 	},
 });
@@ -198,7 +198,16 @@ const updateDepth = async (
 		const playersAll = await idb.cache.players.indexGetAll("playersByTid", tid);
 		const players = addFirstNameShort(
 			await idb.getCopies.playersPlus(playersAll, {
-				attrs: ["pid", "firstName", "lastName", "age", "injury", "watch"],
+				attrs: [
+					"pid",
+					"firstName",
+					"lastName",
+					"age",
+					"injury",
+					"watch",
+					"face",
+					"imgURL",
+				],
 				ratings: ["skills", "pos", "ovr", "pot", "ovrs", "pots", ...ratings],
 				playoffs: playoffs === "playoffs",
 				regularSeason: playoffs === "regularSeason",
@@ -288,6 +297,8 @@ const updateDepth = async (
 			ratings,
 			showDH,
 			stats: stats2,
+			teamColors: t.colors,
+			teamJersey: t.jersey,
 			tid,
 		};
 	}

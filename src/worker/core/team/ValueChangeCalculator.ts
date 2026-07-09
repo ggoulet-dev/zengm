@@ -9,8 +9,14 @@ import type {
 	DraftPick,
 } from "../../../common/types.ts";
 import { getNumPicksPerRound } from "../trade/getPickValues.ts";
-import { bySport } from "../../../common/sportFunctions.ts";
+import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { groupByUnique, last } from "../../../common/utils.ts";
+import {
+	computeContentionPhases,
+	getPhaseAssetMultiplier,
+	getPhaseContractsFactor,
+	type ContentionPhase,
+} from "./contentionPhase.ts";
 
 type Asset =
 	| {
@@ -437,6 +443,7 @@ const sumValues = (
 	strategy: string,
 	tid: number,
 	includeInjuries = false,
+	contentionPhase?: ContentionPhase,
 ) => {
 	if (players.length === 0) {
 		return 0;
@@ -452,7 +459,16 @@ const sumValues = (
 			p.type === "pick" && (season !== p.draftYear || phase <= PHASE.PLAYOFFS);
 
 		// These factors don't make sense for negative value players!!!
-		if (strategy === "rebuilding") {
+		let phaseFactor = 1;
+		if (contentionPhase) {
+			// Hockey: NHL-style lifecycle phase instead of the binary strategy. Applied AFTER the exponent below, so a factor of 1.25 means this asset is worth 25% more to this team - applying it before the exponent would amplify it to 1.25^EXPONENT and turn star trades into massive value transfers to whichever team initiated.
+			if (playerValue > 0) {
+				phaseFactor = getPhaseAssetMultiplier(contentionPhase, {
+					age: p.age,
+					treatAsFutureDraftPick,
+				});
+			}
+		} else if (strategy === "rebuilding") {
 			// Value young/cheap players and draft picks more. Penalize expensive/old players
 			if (treatAsFutureDraftPick) {
 				playerValue *= 1.1;
@@ -506,7 +522,11 @@ const sumValues = (
 			playerValue /= 20;
 		}
 
-		const contractsFactor = strategy === "rebuilding" ? 2 : 0.5;
+		const contractsFactor = contentionPhase
+			? getPhaseContractsFactor(contentionPhase)
+			: strategy === "rebuilding"
+				? 2
+				: 0.5;
 		playerValue += contractsFactor * p.contractValue;
 
 		// if a player was just drafted and can be released, they shouldn't have negative value
@@ -514,7 +534,10 @@ const sumValues = (
 			playerValue = Math.max(0, playerValue);
 		}
 
-		return memo + (playerValue > 1 ? playerValue ** EXPONENT : playerValue);
+		return (
+			memo +
+			phaseFactor * (playerValue > 1 ? playerValue ** EXPONENT : playerValue)
+		);
 	}, 0);
 };
 
@@ -595,6 +618,9 @@ type ValueChangeCache = {
 		tid: number;
 		wp: number;
 	}[];
+
+	// Hockey only, undefined for other sports. Can also miss a tid (team with an empty roster), in which case the binary strategy is used as fallback.
+	contentionPhases: Record<number, ContentionPhase> | undefined;
 };
 
 type ToUpdate = {
@@ -672,11 +698,16 @@ export class ValueChangeCalculator {
 
 			const { estPicks, wps } = await getEstPicks(teamOvrs);
 
+			const contentionPhases = isSport("hockey")
+				? await computeContentionPhases(playersByTid, wps)
+				: undefined;
+
 			return {
 				estPicks,
 				estValues,
 				teamOvrs,
 				wps,
+				contentionPhases,
 			};
 		} else {
 			return {
@@ -704,6 +735,21 @@ export class ValueChangeCalculator {
 		}
 	}
 
+	private async ensureCache() {
+		if (!this.cache) {
+			this.cache = await this.init();
+		} else if (this.toUpdate.draft || this.toUpdate.teams) {
+			this.cache = await this.getUpdatedCache();
+		}
+
+		return this.cache;
+	}
+
+	async getContentionPhase(tid: number): Promise<ContentionPhase | undefined> {
+		const cache = await this.ensureCache();
+		return cache.contentionPhases?.[tid];
+	}
+
 	async evaluate({
 		tid,
 		pidsAdd,
@@ -719,11 +765,7 @@ export class ValueChangeCalculator {
 		dpidsRemove: number[];
 		tradingPartnerTid: number | undefined;
 	}): Promise<number> {
-		if (!this.cache) {
-			this.cache = await this.init();
-		} else if (this.toUpdate.draft || this.toUpdate.teams) {
-			this.cache = await this.getUpdatedCache();
-		}
+		this.cache = await this.ensureCache();
 
 		// Get value and skills for each player on team or involved in the proposed transaction
 		const roster: Asset[] = [];
@@ -758,12 +800,20 @@ export class ValueChangeCalculator {
 			tradingPartnerTid,
 		});
 
+		const contentionPhase = this.cache.contentionPhases?.[tid];
+
 		// console.log("ADD");
-		const valuesAdd = sumValues(add, strategy, tid, true);
+		const valuesAdd = sumValues(add, strategy, tid, true, contentionPhase);
 		// console.log("Total", valuesAdd);
 
 		// console.log("REMOVE");
-		const valuesRemove = sumValues(remove, strategy, tid);
+		const valuesRemove = sumValues(
+			remove,
+			strategy,
+			tid,
+			false,
+			contentionPhase,
+		);
 		// console.log("Total", valuesRemove);
 
 		return valuesAdd - valuesRemove;

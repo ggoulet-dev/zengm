@@ -1,6 +1,6 @@
 import { PHASE } from "../../common/constants.ts";
 import type { Conditions, PlayoffSeries } from "../../common/types.ts";
-import { season, game, phase, freeAgents } from "../core/index.ts";
+import { season, game, league, phase, freeAgents } from "../core/index.ts";
 import { idb } from "../db/index.ts";
 import {
 	g,
@@ -300,6 +300,23 @@ const playMenu = {
 		if (g.get("phase") === PHASE.PRESEASON) {
 			await phase.newPhase(PHASE.REGULAR_SEASON, conditions);
 		}
+	},
+	autoPlayUntilNextDraft: async (param: unknown, conditions: Conditions) => {
+		if (lock.get("gameSim") || local.autoPlayUntil || g.get("gameOver")) {
+			return;
+		}
+
+		const season =
+			g.get("phase") < PHASE.DRAFT_LOTTERY
+				? g.get("season")
+				: g.get("season") + 1;
+		local.autoPlayUntil = {
+			season,
+			phase: PHASE.DRAFT_LOTTERY,
+			start: Date.now(),
+		};
+		await updatePlayMenu();
+		league.autoPlay(conditions);
 	},
 	stopAuto: async () => {
 		local.autoPlayUntil = undefined;

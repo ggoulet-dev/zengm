@@ -16,4 +16,9 @@ export const watchFiles = makeNormalWatcher({
 	},
 	outFilename: "static files",
 	watchFiles: ["public", "data", "node_modules/flag-icons"],
+	// public/css is built and live-reloaded by the dedicated CSS watcher, and
+	// copyFiles ignores it too, so a change there shouldn't trigger a redundant
+	// (no-op) static files rebuild - which would otherwise force a full page
+	// reload instead of a hot CSS swap.
+	ignored: (file) => file.replaceAll("\\", "/").includes("public/css"),
 });

@@ -19,6 +19,8 @@ import {
 import { range } from "../../common/utils.ts";
 import type { DataTableRow } from "../components/DataTable/index.tsx";
 import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels.tsx";
+import { HockeyLineCards } from "../components/HockeyLineCards.tsx";
+import { safeLocalStorage } from "../util/safeLocalStorage.ts";
 
 const handleAutoSort = async (pos: string) => {
 	await toWorker("main", "autoSortRoster", { pos });
@@ -109,6 +111,8 @@ const Depth = ({
 	ratings,
 	showDH,
 	stats,
+	teamColors,
+	teamJersey,
 	tid,
 }: View<"depth">) => {
 	if (!isSport("baseball") && !isSport("football") && !isSport("hockey")) {
@@ -124,6 +128,9 @@ const Depth = ({
 	const [sortedPids, setSortedPids] = useState<number[] | undefined>();
 	const [prevPos, setPrevPos] = useState(pos);
 	const [prevPlayers, setPrevPlayers] = useState(players);
+	const [showTable, setShowTable] = useState(
+		() => safeLocalStorage.getItem("hockeyLinesView") === "table",
+	);
 
 	useTitleBar({
 		title: bySport({
@@ -176,7 +183,19 @@ const Depth = ({
 	const numLines = numLinesByPos ? numLinesByPos[pos]! : 1;
 
 	let rowLabels: string[] | undefined;
-	if (isSport("baseball")) {
+	if (isSport("hockey")) {
+		if (pos === "F") {
+			rowLabels = range(NUM_LINES.F).flatMap((i) => [
+				`L${i + 1} C`,
+				`L${i + 1} W`,
+				`L${i + 1} W`,
+			]);
+		} else if (pos === "D") {
+			rowLabels = range(NUM_LINES.D).flatMap((i) => [`P${i + 1}`, `P${i + 1}`]);
+		} else if (pos === "G") {
+			rowLabels = ["Starter", "Backup"];
+		}
+	} else if (isSport("baseball")) {
 		if (pos === "L" || pos === "LP") {
 			rowLabels = range(1, 10).map(String);
 		} else if (pos === "D") {
@@ -217,6 +236,17 @@ const Depth = ({
 		}
 
 		return pids;
+	};
+
+	const handleSwap = async (index1: number, index2: number) => {
+		const newSortedPids = playersSorted.map((p) => p.pid);
+		newSortedPids[index1] = playersSorted[index2]!.pid;
+		newSortedPids[index2] = playersSorted[index1]!.pid;
+		setSortedPids(newSortedPids);
+		await toWorker("main", "reorderDepthDrag", {
+			pos,
+			sortedPids: getIDsToSave(newSortedPids),
+		});
 	};
 
 	const overrides: Parameters<typeof getCols>[1] = {};
@@ -415,6 +445,33 @@ const Depth = ({
 				})}
 			</ul>
 
+			{isSport("hockey") ? (
+				<div className="btn-group mb-3">
+					<button
+						className={clsx("btn btn-light-bordered", {
+							active: !showTable,
+						})}
+						onClick={() => {
+							setShowTable(false);
+							safeLocalStorage.setItem("hockeyLinesView", "cards");
+						}}
+					>
+						Lineup
+					</button>
+					<button
+						className={clsx("btn btn-light-bordered", {
+							active: showTable,
+						})}
+						onClick={() => {
+							setShowTable(true);
+							safeLocalStorage.setItem("hockeyLinesView", "table");
+						}}
+					>
+						Table
+					</button>
+				</div>
+			) : null}
+
 			{editable ? (
 				<>
 					<div className="btn-group mb-2">
@@ -454,10 +511,10 @@ const Depth = ({
 				</>
 			) : null}
 
-			{isSport("hockey") && pos === "F" ? (
+			{isSport("hockey") && pos === "F" && showTable ? (
 				<div className="alert alert-info d-inline-block">
-					Each line of forwards is made up of one center and two wings. The
-					center is the first of the three players in each line.
+					Each line of forwards is made up of one center and two wings, as shown
+					by the line and position labels in the first column.
 				</div>
 			) : null}
 
@@ -491,46 +548,50 @@ const Depth = ({
 				</div>
 			) : null}
 
-			<div style={editable ? { marginTop: -16 } : undefined}>
-				<DataTable
-					cols={cols}
-					defaultSort="disableSort"
-					// Different value for baseball is because that uses showRowLabels, which adds an extra column
-					defaultStickyCols={window.mobile ? 0 : isSport("baseball") ? 3 : 2}
-					name={`Depth${pos}`}
-					rows={rows}
-					hideAllControls={editable}
-					nonfluid
-					showRowLabels={!!rowLabels}
-					sortableRows={
-						editable
-							? {
-									highlightHandle: ({ index }) =>
-										index < numStarters * numLines,
-									onChange: async ({ oldIndex, newIndex }) => {
-										const pids = players.map((p) => p.pid);
-										const newSortedPids = arrayMove(pids, oldIndex, newIndex);
-										setSortedPids(newSortedPids);
-										await toWorker("main", "reorderDepthDrag", {
-											pos,
-											sortedPids: getIDsToSave(newSortedPids),
-										});
-									},
-									onSwap: async (index1, index2) => {
-										const newSortedPids = players.map((p) => p.pid);
-										newSortedPids[index1] = players[index2].pid;
-										newSortedPids[index2] = players[index1].pid;
-										setSortedPids(newSortedPids);
-										await toWorker("main", "reorderDepthDrag", {
-											pos,
-											sortedPids: getIDsToSave(newSortedPids),
-										});
-									},
-								}
-							: undefined
-					}
+			{isSport("hockey") && !showTable ? (
+				<HockeyLineCards
+					key={pos}
+					challengeNoRatings={!!challengeNoRatings}
+					editable={editable}
+					onSwap={handleSwap}
+					players={playersSorted}
+					pos={pos}
+					teamColors={teamColors}
+					teamJersey={teamJersey}
 				/>
-			</div>
+			) : (
+				<div style={editable ? { marginTop: -16 } : undefined}>
+					<DataTable
+						cols={cols}
+						defaultSort="disableSort"
+						// Extra value is because showRowLabels adds an extra column
+						defaultStickyCols={window.mobile ? 0 : rowLabels ? 3 : 2}
+						name={`Depth${pos}`}
+						rows={rows}
+						hideAllControls={editable}
+						nonfluid
+						showRowLabels={!!rowLabels}
+						sortableRows={
+							editable
+								? {
+										highlightHandle: ({ index }) =>
+											index < numStarters * numLines,
+										onChange: async ({ oldIndex, newIndex }) => {
+											const pids = players.map((p) => p.pid);
+											const newSortedPids = arrayMove(pids, oldIndex, newIndex);
+											setSortedPids(newSortedPids);
+											await toWorker("main", "reorderDepthDrag", {
+												pos,
+												sortedPids: getIDsToSave(newSortedPids),
+											});
+										},
+										onSwap: handleSwap,
+									}
+								: undefined
+						}
+					/>
+				</div>
+			)}
 		</>
 	);
 };

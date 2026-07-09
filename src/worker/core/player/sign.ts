@@ -17,6 +17,10 @@ const sign = async (
 		p.draft.year === g.get("season") &&
 		p.draft.tid === tid;
 
+	// Signing anywhere ends restricted free agency (hockey). The rights team re-signing its own RFA counts as a re-signing, even during free agency.
+	const rfaResign = p.rfaTid !== undefined && p.rfaTid === tid;
+	delete p.rfaTid;
+
 	p.tid = tid;
 	p.numDaysFreeAgent = 0;
 	p.gamesUntilTradable = isRookie ? 0 : Math.round(0.17 * g.get("numGames")); // 14 for basketball, 3 for football
@@ -35,7 +39,8 @@ const sign = async (
 
 	setContract(p, contract, true);
 	const resigning =
-		phase === PHASE.RESIGN_PLAYERS && p.draft.year !== g.get("season");
+		(phase === PHASE.RESIGN_PLAYERS && p.draft.year !== g.get("season")) ||
+		rfaResign;
 	const eventType = resigning ? "reSigned" : "freeAgent";
 	const eid = await logEvent({
 		type: eventType,

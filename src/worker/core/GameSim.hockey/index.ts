@@ -1,4 +1,5 @@
 import { g, helpers } from "../../util/index.ts";
+import { PHASE } from "../../../common/constants.ts";
 import {
 	NUM_LINES,
 	NUM_PLAYERS_PER_LINE,
@@ -13,7 +14,11 @@ import type {
 	TeamGameSim,
 } from "./types.ts";
 import getCompositeFactor from "./getCompositeFactor.ts";
-import { penalties, penaltyTypes } from "../GameSim.hockey/penalties.ts";
+import {
+	fightPenalty,
+	penalties,
+	penaltyTypes,
+} from "../GameSim.hockey/penalties.ts";
 import PenaltyBox from "./PenaltyBox.ts";
 import getInjuryRate from "../GameSim.basketball/getInjuryRate.ts";
 import GameSimBase from "../GameSim/GameSimBase.ts";
@@ -26,6 +31,102 @@ import { choice } from "../../../common/random.ts";
 const teamNums: [TeamNum, TeamNum] = [0, 1];
 
 const GOALS = new Set(["evG", "ppG", "shG"]);
+
+// NHL regular season overtime has been 3-on-3 since 2015, which opens up the ice. Added to the shot quality roll r (higher r = better for the shooter), tuned so roughly 65-75% of regular season overtimes end before the shootout, like in the NHL.
+const THREE_ON_THREE_SHOT_BOOST = 0.06;
+
+// In 3-on-3 overtime, coaches send their best offensive skaters rather than rolling regular lines. Pool sizes control how many of the top forwards/defensemen rotate through the overtime ice time.
+const THREE_ON_THREE_POOL_SIZE = {
+	F: 5,
+	D: 3,
+};
+
+// Fights are rolled after hits, scaled by both players' enforcer rating, the score margin (lopsided games fight more), elapsed game time (frustration builds late), and the fightFactor game attribute. probPerHit is tuned against the sim's hit rate so the league averages ~0.3-0.4 fights/game, matching the NHL's own real-data rate of 449 fights per 1230-game season (see fightPenalty in penalties.ts). With real NHL rosters the engine produces ~22 hits/team/game (~44/game), so probPerHit must be far lower than a generated-roster harness (which saw only ~13 hits/game) implied - otherwise PIM doubles from runaway fighting.
+export const FIGHT = {
+	probPerHit: 0.006,
+
+	// marginFactor = 1 + probPerGoalDifferential * min(margin, maxGoalDifferential)
+	probPerGoalDifferential: 0.25,
+	maxGoalDifferential: 4,
+
+	// timeFactor ranges from 1 - probLateGame / 2 (opening faceoff) to 1 + probLateGame / 2 (end of regulation), averaging 1
+	probLateGame: 0.5,
+};
+
+// Mid-game goalie hook: the coach pulls a struggling starter for the backup, based on the on-ice goalie's live stat line. Tuned so starters get hooked in roughly 3-6% of team-games league-wide (a handful of relief appearances per NHL team per season).
+export const GOALIE_HOOK = {
+	// Hooked at this many goals against, regardless of save fraction. Thresholds are
+	// one lower than a naive count because the scoring recalibration dropped goals to
+	// ~3.1/team/game; at the old 6/5/4 a struggling starter almost never reached the
+	// hook in the new, lower-scoring environment.
+	gaAnytime: 5,
+
+	// Hooked earlier if the save fraction is bad
+	gaPoorSv: 4,
+	poorSvFraction: 0.85,
+
+	// Quick hook for a goalie shelled in the 1st period
+	gaFirstPeriod: 3,
+	firstPeriodSvFraction: 0.75,
+};
+
+// === Shot funnel calibration (tuned against the real NHL roster, not generated players) ===
+// doShot rolls a SINGLE uniform r per attempt and gates it sequentially:
+//   r < probBlock                         -> blocked shot
+//   probBlock <= r < missThreshold        -> missed the net
+//   missThreshold <= r < savePercentage   -> shot on goal, saved
+//   r >= savePercentage                   -> goal
+// So the constants below carve [0,1] into NHL-like slices: ~26% blocked, ~23% miss the net,
+// ~51% on goal, ~10% of shots-on-goal score (=> ~3.0 goals, ~29 SOG, .901 SV%, 10% shooting).
+//
+// probBlock = SHOT_BLOCK_BASE + SHOT_BLOCK_RANGE * opponent blocking composite.
+const SHOT_BLOCK_BASE = 0.05;
+const SHOT_BLOCK_RANGE = 0.34;
+//
+// missThreshold = SHOT_MISS_BASE - SHOT_MISS_SCORING * shooter scoring composite (fatigue-adjusted).
+// The old formula (0.75 - scoring) collapsed below probBlock for any skilled shooter, so almost
+// nothing missed the net and SOG ran ~40/game; a lower base with a gentler scoring slope keeps a
+// realistic ~23% of attempts wide/over the net while still rewarding snipers with fewer misses.
+const SHOT_MISS_BASE = 0.68;
+const SHOT_MISS_SCORING = 0.35;
+//
+// savePercentage = GOALIE_SAVE_BASE + shotQualityComponent + glk composite * GOALIE_SAVE_GLK.
+// The old 0.947 + glk*0.07 saturated at the 0.99 cap for every real NHL goalie (glk 70-93),
+// so goalies were superhuman (league .958, GAA ~1.1). A lower base de-saturates the formula so
+// the goalkeeping rating is discriminating again across the real NHL talent range:
+//   glk 60 -> ~.886, glk 78 (typical starter) -> ~.901, glk 93 (elite) -> ~.918.
+const GOALIE_SAVE_BASE = 0.917;
+const GOALIE_SAVE_GLK = 0.062;
+
+// Role-anchored shooter selection. The shooter used to be picked purely by scoring composite
+// across all skaters on the ice, which let this roster's many elite offensive defensemen take
+// ~36% of all shots - well above the NHL's ~27% D share. We instead decide forward-vs-defense by
+// a fixed role split first, then pick the shooter within that group by scoring. This keeps the
+// shot distribution realistic no matter how offensively gifted a team's blue line is.
+const SHOOTER_D_SHARE = 0.27;
+
+// Even at a realistic shot share, defensemen shoot from distance (point shots), which are
+// lower-danger than a forward's chance from the slot. This small bonus to the goalie's save odds
+// on a defenseman's own shot keeps offensive D piling up assists from the point while scoring
+// realistically few of their own goals (the single-season NHL D goal record is ~25; without any
+// correction this roster produced 50-goal defensemen).
+const SHOOTER_D_SAVE_BONUS = 0.03;
+
+// NHL "score effects": a trailing team presses for offense while a leading team sits back to protect
+// the lead. The swing grows with the score margin and as the game gets late, mirroring the real
+// surge in the trailing team's shot share in the third period. It is applied by nudging the
+// per-possession "nothing happens" rate (BASE_NOTHING): the offense fizzles fewer possessions when
+// behind and more when ahead. Because every lead is someone else's deficit, league-wide shot and
+// goal totals stay ~unchanged; what changes is game feel - more comebacks, more late pushes, and a
+// few more games reaching overtime.
+const BASE_NOTHING = 0.05;
+const SCORE_EFFECTS = {
+	// Largest change to the per-possession nothing rate (at max margin, end of regulation)
+	maxNothingSwing: 0.04,
+
+	// Score margin (goals) at which the effect saturates
+	maxMargin: 3,
+};
 
 /**
  * Convert energy into fatigue, which can be multiplied by a rating to get a fatigue-adjusted value.
@@ -90,6 +191,38 @@ class GameSim extends GameSimBase {
 	synergyFactor: number;
 
 	pulledGoalie: [boolean, boolean];
+
+	// Backup dressed for each team, so a struggling starter can be hooked mid-game
+	backupGoalies: [PlayerGameSim | undefined, PlayerGameSim | undefined] = [
+		undefined,
+		undefined,
+	];
+
+	// A goalie hook happens at most once per game per team, and the hooked starter does not return
+	hookedGoalie: [boolean, boolean] = [false, false];
+
+	// Regular season overtime is played 3-on-3 (NHL rule since 2015); playoffs stay 5-on-5
+	threeOnThree = false;
+
+	// Major penalties assessed this game (fights included). Returned from run() so writePlayerStats can roll supplemental discipline (suspensions) - only "pim" is in stats, so majors must flow out of GameSim directly.
+	majorPenalties: { pid: number; name: string }[] = [];
+
+	// Goalies in net (for both teams, by team index) when each goal was scored, in order. Returned from run() so writePlayerStats can assign the goalie decisions by the NHL rule (W/L go to the goalies of record for the game-winning goal), which matters after a mid-game goalie hook. undefined = empty net.
+	goaliesAtGoals: {
+		t: TeamNum;
+		goaliePids: [number | undefined, number | undefined];
+	}[] = [];
+
+	// Goalies in net for the shootout, if there was one - the shootout decision goes to them
+	shootoutGoaliePids: [number, number] | undefined;
+
+	// OT winners and shootout deciders. writeGameStats appends the score/opponent and a period to text, so text must include neither
+	clutchPlays: {
+		text: string;
+		showNotification: boolean;
+		pids: [number];
+		tids: [number];
+	}[] = [];
 
 	constructor({
 		gid,
@@ -176,22 +309,29 @@ class GameSim extends GameSimBase {
 			},
 		];
 
-		this.penaltyBox = new PenaltyBox(({ t, p, minutesAgo, ppo }) => {
-			this.playByPlay.logEvent({
-				type: "penaltyOver",
-				clock: this.clock + minutesAgo,
-				t,
-				names: [p.name],
-				penaltyPID: p.id,
-			});
+		this.penaltyBox = new PenaltyBox(
+			({ t, p, minutesAgo, ppo, coincidental }) => {
+				this.playByPlay.logEvent({
+					type: "penaltyOver",
+					clock: this.clock + minutesAgo,
+					t,
+					names: [p.name],
+					penaltyPID: p.id,
+				});
 
-			if (ppo > 0) {
-				const t2 = t === 0 ? 1 : 0;
-				this.recordStat(t2, undefined, "ppo", 1);
-			}
+				if (ppo > 0) {
+					const t2 = t === 0 ? 1 : 0;
+					this.recordStat(t2, undefined, "ppo", 1);
+				}
 
-			this.updatePlayersOnIce({ type: "penaltyOver", p, t });
-		});
+				if (coincidental) {
+					// On-ice strength was never affected, so nobody steps out of the box onto the ice - the fighter rejoins at his line's next shift
+					return;
+				}
+
+				this.updatePlayersOnIce({ type: "penaltyOver", p, t });
+			},
+		);
 
 		this.pulledGoalie = [false, false];
 	}
@@ -227,12 +367,23 @@ class GameSim extends GameSimBase {
 
 				// Handle rest days for goalie
 				if (pos === "G") {
-					const [starter, backup] = getStartingAndBackupGoalies(players);
-					players = [
-						starter,
-						backup,
-						...players.filter((p) => p !== starter && p !== backup),
-					];
+					// After a mid-game hook, the relief goalie (still in backupGoalies) stays in net even if injuries force new lines - the hooked starter does not return
+					const reliefGoalie = this.hookedGoalie[t]
+						? this.backupGoalies[t]
+						: undefined;
+					if (reliefGoalie && !reliefGoalie.injured) {
+						players = [
+							reliefGoalie,
+							...players.filter((p) => p !== reliefGoalie),
+						];
+					} else {
+						const [starter, backup] = getStartingAndBackupGoalies(players);
+						players = [
+							starter,
+							backup,
+							...players.filter((p) => p !== starter && p !== backup),
+						];
+					}
 				}
 
 				const numInDepthChart = NUM_LINES[pos] * NUM_PLAYERS_PER_LINE[pos];
@@ -275,6 +426,19 @@ class GameSim extends GameSimBase {
 				}
 
 				this.lines[t][pos] = lines;
+
+				// After a hook, backupGoalies keeps pointing at the relief goalie now in net
+				if (pos === "G" && !this.hookedGoalie[t]) {
+					// Stash the backup ordering from getStartingAndBackupGoalies so checkGoalieHook can swap him in mid-game. depth.G is the whole roster sorted by goalie rating, so require a natural goalie - otherwise a skater could end up in net when only one real goalie is healthy. No healthy natural backup means no mid-game hook.
+					const dressedGoalie = lines[0]![0];
+					this.backupGoalies[t] = players.find(
+						(p) =>
+							p.pos === "G" &&
+							p !== dressedGoalie &&
+							!p.injured &&
+							!usedPlayerIDs.has(p.id),
+					);
+				}
 			}
 
 			// Special case for forwards (no need to check inDepthChart anymore, since other positions are already done)
@@ -458,10 +622,13 @@ class GameSim extends GameSimBase {
 			day: this.day,
 			overtimes: this.overtimes,
 			team: this.team,
-			clutchPlays: [],
+			clutchPlays: this.clutchPlays,
 			playByPlay: this.playByPlay.getPlayByPlay(this.team),
 			neutralSite: this.neutralSite,
 			scoringSummary: this.playByPlay.scoringSummary,
+			majorPenalties: this.majorPenalties,
+			goaliesAtGoals: this.goaliesAtGoals,
+			shootoutGoaliePids: this.shootoutGoaliePids,
 		};
 		return out;
 	}
@@ -498,6 +665,8 @@ class GameSim extends GameSimBase {
 			goalType: "pn",
 			shotType: "penalty shot",
 		});
+
+		return made;
 	}
 
 	doShootout() {
@@ -530,16 +699,18 @@ class GameSim extends GameSimBase {
 				eligible = this.team[t].depth.F;
 			}
 
-			return orderBy(
-				this.team[t].depth.F,
-				(p) => p.compositeRating.scoring,
-				"desc",
-			);
+			return orderBy(eligible, (p) => p.compositeRating.scoring, "desc");
 		}) as [PlayerGameSim[], PlayerGameSim[]];
 
+		// goalies[t] is the goalie FACING team t's shooters, from the other team's lines
 		const goalies = teamNums.map((t) => {
 			return this.lines[t === 0 ? 1 : 0].G[0]![0]!;
 		}) as [PlayerGameSim, PlayerGameSim];
+
+		this.shootoutGoaliePids = [
+			this.lines[0].G[0]![0]!.id,
+			this.lines[1].G[0]![0]!.id,
+		];
 
 		const skatersIndex: [number, number] = [0, 0];
 
@@ -549,10 +720,15 @@ class GameSim extends GameSimBase {
 			return skater;
 		};
 
+		// Scorers in order, to find the deciding goal after the shootout ends
+		const scorers: [PlayerGameSim[], PlayerGameSim[]] = [[], []];
+
 		SHOOTOUT_ROUNDS: for (let i = 0; i < this.shootoutRounds; i++) {
 			for (const t of reversedTeamNums) {
 				const p = getNextSkater(t);
-				this.doShootoutShot(t, p, goalies[t]);
+				if (this.doShootoutShot(t, p, goalies[t])) {
+					scorers[t].push(p);
+				}
 
 				if (
 					this.shouldEndShootoutEarly(t, i, [
@@ -574,10 +750,26 @@ class GameSim extends GameSimBase {
 			while (this.team[0].stat.sPts === this.team[1].stat.sPts) {
 				for (const t of reversedTeamNums) {
 					const p = getNextSkater(t);
-					this.doShootoutShot(t, p, goalies[t]);
+					if (this.doShootoutShot(t, p, goalies[t])) {
+						scorers[t].push(p);
+					}
 				}
 			}
 		}
+
+		const winner = this.team[0].stat.sPts > this.team[1].stat.sPts ? 0 : 1;
+		const loser = winner === 0 ? 1 : 0;
+
+		// Like the NHL's game-deciding goal: the winner's goal that exceeded the loser's final total. The winner always has at least sPts[loser] + 1 goals, so this index is valid
+		const decidingScorer = scorers[winner][this.team[loser].stat.sPts]!;
+		this.clutchPlays.push({
+			text: `<a href="${helpers.leagueUrl(["player", decidingScorer.id])}">${
+				decidingScorer.name
+			}</a> scored the shootout-deciding goal`,
+			showNotification: this.team[winner].id === g.get("userTid"),
+			pids: [decidingScorer.id],
+			tids: [this.team[winner].id],
+		});
 	}
 
 	simRegulation() {
@@ -594,7 +786,19 @@ class GameSim extends GameSimBase {
 					this.injuries();
 					this.updatePlayersOnIce({ type: "normal" });
 					this.checkPullGoalie(this.o);
+					this.checkGoalieHook(0);
+					this.checkGoalieHook(1);
 				}
+			}
+
+			// A goal as the period expires can push the goalie past the hook thresholds with no clock left for the in-loop check, and next period the first period quick hook no longer applies - so check once more with the just-ended period's thresholds, unless the game is over
+			if (
+				quarter < this.numPeriods ||
+				(this.team[0].stat.pts === this.team[1].stat.pts &&
+					(this.maxOvertimes > 0 || this.shootoutRounds > 0))
+			) {
+				this.checkGoalieHook(0);
+				this.checkGoalieHook(1);
 			}
 
 			quarter += 1;
@@ -621,6 +825,8 @@ class GameSim extends GameSimBase {
 	simOvertime() {
 		this.clock = this.getOvertimeLength();
 
+		this.threeOnThree = g.get("phase") !== PHASE.PLAYOFFS;
+
 		this.minutesSinceLineChange[0].F = 0;
 		this.minutesSinceLineChange[0].D = 0;
 		this.minutesSinceLineChange[1].F = 0;
@@ -634,7 +840,10 @@ class GameSim extends GameSimBase {
 			type: "overtime",
 			clock: this.clock,
 			quarter: this.team[0].stat.ptsQtrs.length,
+			threeOnThree: this.threeOnThree,
 		});
+
+		// No need to guard checkPullGoalie against 3-on-3 - in sudden death OT the score is always tied, and shouldPullGoalie additionally requires period === numPeriods, so the calls below can only put a goalie back in net
 
 		this.checkPullGoalie(this.o);
 		this.checkPullGoalie(this.d);
@@ -668,13 +877,14 @@ class GameSim extends GameSimBase {
 		return (
 			Math.random() <
 			(this.allStarGame ? 0.1 : 1) *
-				0.3 *
+				0.24 *
 				(this.team[this.o].compositeRating.hitting +
 					this.team[this.d].compositeRating.hitting) *
 				g.get("hitFactor")
 		);
 	}
 
+	// Returns true if the hit boiled over into a fight, which stops play
 	doHit() {
 		const t = choice(teamNums, (t) => this.team[t].compositeRating.hitting);
 		const t2 = t === 0 ? 1 : 0;
@@ -691,12 +901,112 @@ class GameSim extends GameSimBase {
 			names: [hitter.name, target.name],
 		});
 
+		if (this.checkFight(t, hitter, t2, target)) {
+			return true;
+		}
+
 		this.injuries({
 			type: "hit",
 			hitter,
 			target,
 			t: t2,
 		});
+
+		return false;
+	}
+
+	checkFight(
+		t: TeamNum,
+		hitter: PlayerGameSim,
+		t2: TeamNum,
+		target: PlayerGameSim,
+	) {
+		// Fights basically never happen in overtime (and 3-on-3 makes them even less plausible). Goalies never fight here either - hitter/target are skaters by construction (pickPlayer with ["C", "W", "D"]).
+		if (this.overtime || this.allStarGame) {
+			return false;
+		}
+
+		const fightFactor = g.get("fightFactor");
+		if (fightFactor <= 0) {
+			return false;
+		}
+
+		const margin = Math.abs(this.team[0].stat.pts - this.team[1].stat.pts);
+		const marginFactor =
+			1 +
+			FIGHT.probPerGoalDifferential *
+				Math.min(margin, FIGHT.maxGoalDifferential);
+
+		const period = this.team[0].stat.ptsQtrs.length;
+		const periodLength = g.get("quarterLength");
+		const fractionElapsed = helpers.bound(
+			(period -
+				1 +
+				(periodLength > 0 ? (periodLength - this.clock) / periodLength : 0)) /
+				this.numPeriods,
+			0,
+			1,
+		);
+		const timeFactor =
+			1 - FIGHT.probLateGame / 2 + FIGHT.probLateGame * fractionElapsed;
+
+		const prob =
+			FIGHT.probPerHit *
+			(hitter.compositeRating.enforcer + target.compositeRating.enforcer) *
+			marginFactor *
+			timeFactor *
+			fightFactor;
+
+		if (Math.random() >= prob) {
+			return false;
+		}
+
+		this.doFight(t, hitter, t2, target);
+
+		return true;
+	}
+
+	// NHL fights are coincidental majors: both fighters sit 5 minutes (with no early release on goals) but neither team loses a skater on the ice
+	doFight(
+		t: TeamNum,
+		hitter: PlayerGameSim,
+		t2: TeamNum,
+		target: PlayerGameSim,
+	) {
+		const winner = choice(
+			[hitter, target],
+			(p) => 0.1 + p.compositeRating.enforcer + p.compositeRating.power,
+		);
+		const loser = winner === hitter ? target : hitter;
+
+		const fighters: [TeamNum, PlayerGameSim][] = [
+			[t, hitter],
+			[t2, target],
+		];
+		for (const [tFighter, p] of fighters) {
+			this.penaltyBox.add(tFighter, p, fightPenalty, true);
+			this.recordStat(
+				tFighter,
+				p,
+				"pim",
+				penaltyTypes[fightPenalty.type].minutes,
+			);
+			this.majorPenalties.push({
+				pid: p.id,
+				name: fightPenalty.name,
+			});
+		}
+
+		this.playByPlay.logEvent({
+			type: "fight",
+			clock: this.clock,
+			t: winner === hitter ? t : t2,
+			names: [winner.name, loser.name],
+			pids: [winner.id, loser.id],
+		});
+
+		// Actually remove both fighters from the ice. Coincidental majors are excluded from PenaltyBox.count, so the line change below ices a full complement for both teams.
+		this.updatePlayersOnIce({ type: "penalty" });
 	}
 
 	isGiveaway() {
@@ -734,7 +1044,33 @@ class GameSim extends GameSimBase {
 	}
 
 	isNothing() {
-		return Math.random() < 0.1;
+		let prob = BASE_NOTHING;
+
+		// Score effects: tilt the offense's productivity by the score margin, weighted by how late it
+		// is. No effect when tied or in the shootout.
+		const margin = this.team[this.o].stat.pts - this.team[this.d].stat.pts;
+		if (!this.shootout && margin !== 0) {
+			const period = this.team[0].stat.ptsQtrs.length;
+			const periodLength = g.get("quarterLength");
+			const fractionElapsed = helpers.bound(
+				(period -
+					1 +
+					(periodLength > 0 ? (periodLength - this.clock) / periodLength : 0)) /
+					this.numPeriods,
+				0,
+				1,
+			);
+			const marginFactor =
+				Math.min(Math.abs(margin), SCORE_EFFECTS.maxMargin) /
+				SCORE_EFFECTS.maxMargin;
+			const swing =
+				SCORE_EFFECTS.maxNothingSwing * marginFactor * fractionElapsed;
+
+			// Leading offense sits back (more fizzled possessions); trailing offense presses (fewer)
+			prob += margin > 0 ? swing : -swing;
+		}
+
+		return Math.random() < prob;
 	}
 
 	doGiveaway() {
@@ -765,7 +1101,7 @@ class GameSim extends GameSimBase {
 
 	advanceClock(special?: "rebound") {
 		// 1 to N seconds, or less if it's a rebound
-		const maxLength = special === "rebound" ? 0.05 : 0.28;
+		const maxLength = special === "rebound" ? 0.05 : 0.235;
 
 		let dt = Math.random() * (maxLength - 0.017) + 0.017;
 		dt /= g.get("pace");
@@ -801,7 +1137,13 @@ class GameSim extends GameSimBase {
 	}
 
 	doShot(special?: "rebound") {
-		const shooter = this.pickPlayer(this.o, "scoring", ["C", "W", "D"], 3);
+		// Decide whether this shot comes off a defenseman's stick or a forward's before picking
+		// the individual shooter, so the F/D shot split stays NHL-realistic (see SHOOTER_D_SHARE).
+		const shooterPositions: Position[] =
+			Math.random() < SHOOTER_D_SHARE ? ["D"] : ["C", "W"];
+		const shooter =
+			this.pickPlayer(this.o, "scoring", shooterPositions, 5) ??
+			this.pickPlayer(this.o, "scoring", ["C", "W", "D"], 5);
 
 		const type: "slapshot" | "wristshot" | "shot" | "reboundShot" =
 			special === "rebound"
@@ -842,17 +1184,26 @@ class GameSim extends GameSimBase {
 
 		// Power play adjusts odds of a miss
 		if (totalStrengthDifference > 1) {
-			r += 0.2 * pulledGoalieFactor;
+			// 5-on-3: big boost, but the old +0.2 over-converted (PP% ran ~34%) once the save
+			// formula was de-saturated, so it is dialed back to land NHL ~20-22% power-play %.
+			r += 0.12 * pulledGoalieFactor;
 		} else if (totalStrengthDifference === 1) {
-			r += 0.1 * pulledGoalieFactor;
+			// Standard 5-on-4 power play.
+			r += 0.05 * pulledGoalieFactor;
 		} else if (totalStrengthDifference === -1) {
 			r -= 0.025 * pulledGoalieFactor;
 		} else if (totalStrengthDifference < -1) {
 			r -= 0.5 * pulledGoalieFactor;
 		}
 
+		// Open ice at 3-on-3 makes every rush more dangerous
+		if (this.threeOnThree) {
+			r += THREE_ON_THREE_SHOT_BOOST;
+		}
+
 		let probBlock =
-			(0.1 + 0.35 * this.team[this.d].compositeRating.blocking) *
+			(SHOT_BLOCK_BASE +
+				SHOT_BLOCK_RANGE * this.team[this.d].compositeRating.blocking) *
 			g.get("blockFactor");
 		if (this.allStarGame) {
 			probBlock /= 2;
@@ -898,10 +1249,13 @@ class GameSim extends GameSimBase {
 			}
 		}
 
-		// Can tune the exponent to adjust the cross-team variance of shooting percentage, and the constant to set the baseline shooting percentage
+		// Did the shot miss the net entirely? See the shot-funnel constants above.
 		if (
 			r <
-			0.75 - shooter.compositeRating.scoring * fatigue(shooter.stat.energy)
+			SHOT_MISS_BASE -
+				SHOT_MISS_SCORING *
+					shooter.compositeRating.scoring *
+					fatigue(shooter.stat.energy)
 		) {
 			this.playByPlay.logEvent({
 				type: "miss",
@@ -924,13 +1278,13 @@ class GameSim extends GameSimBase {
 			const r2 = Math.random();
 			if (deflector) {
 				assister1 = shooter;
-			} else if (r2 < 0.99 * g.get("assistFactor")) {
+			} else if (r2 < 0.97 * g.get("assistFactor")) {
 				// 20 power is to ensure top players get a lot
 				assister1 = this.pickPlayer(this.o, "playmaker", ["C", "W", "D"], 20, [
 					actualShooter,
 				]);
 			}
-			if (r2 < 0.8 * g.get("assistFactor")) {
+			if (r2 < 0.77 * g.get("assistFactor")) {
 				// 0.5 power is to ensure that everybody (including defensemen) at least get some
 				assister2 = this.pickPlayer(this.o, "playmaker", ["C", "W", "D"], 0.5, [
 					actualShooter,
@@ -960,15 +1314,19 @@ class GameSim extends GameSimBase {
 			// shotQualityFactor is generally between 0.3 and 0.9, so shotQualityProbComponent is -1 to 1
 			const shotQualityProbComponent =
 				(helpers.bound(shotQualityFactor, 0.3, 0.9) - 0.3) * (2 / 0.6) - 1;
-			const shotQualityProbComponent2 = -0.025 * shotQualityProbComponent; // -0.025 to 0.025
+			const shotQualityProbComponent2 = -0.04 * shotQualityProbComponent; // -0.04 to 0.04
 
 			// Save percentage does not depend on defenders https://www.tsn.ca/defencemen-and-their-impact-on-team-save-percentage-1.567469
+			const dShooterSaveBonus =
+				actualShooter.pos === "D" ? SHOOTER_D_SAVE_BONUS : 0;
+
 			let savePercentage = helpers.bound(
 				Math.min(
 					0.99,
-					(0.9 +
+					(GOALIE_SAVE_BASE +
 						shotQualityProbComponent2 +
-						goalie.compositeRating.goalkeeping * 0.07) *
+						dShooterSaveBonus +
+						goalie.compositeRating.goalkeeping * GOALIE_SAVE_GLK) *
 						g.get("saveFactor"),
 				),
 				0,
@@ -1027,6 +1385,13 @@ class GameSim extends GameSimBase {
 		if (goalie) {
 			this.recordStat(this.d, goalie, "ga");
 		}
+		this.goaliesAtGoals.push({
+			t: this.o,
+			goaliePids: [
+				this.playersOnIce[0].G[0]?.id,
+				this.playersOnIce[1].G[0]?.id,
+			],
+		});
 
 		const totalG =
 			actualShooter.stat["evG"] +
@@ -1073,6 +1438,22 @@ class GameSim extends GameSimBase {
 
 		this.penaltyBox.goal(this.o);
 
+		if (this.overtime) {
+			// Sudden death, so this goal wins the game
+			const overtimePart =
+				this.overtimes > 1
+					? `the ${helpers.ordinal(this.overtimes)} overtime`
+					: `${this.threeOnThree ? "3-on-3 " : ""}overtime`;
+			this.clutchPlays.push({
+				text: `<a href="${helpers.leagueUrl(["player", actualShooter.id])}">${
+					actualShooter.name
+				}</a> scored the game-winning goal in ${overtimePart}`,
+				showNotification: this.team[this.o].id === g.get("userTid"),
+				pids: [actualShooter.id],
+				tids: [this.team[this.o].id],
+			});
+		}
+
 		return "goal";
 	}
 
@@ -1116,8 +1497,13 @@ class GameSim extends GameSimBase {
 
 		const r = Math.random();
 
-		// Sum numPerSeason, divide by (60 * 82 * 30) assuming 60 seconds per possession, 82 games, 30 teams
-		const probPenaltyPerPossession = 0.06 * g.get("foulRateFactor");
+		// checkPenalty is rolled once per possession, and hockey's pace override makes a
+		// possession much shorter than a minute, so this fires ~140x/game - not the ~60 a
+		// "60 seconds per possession" reading of the penalties table would imply. 0.041 is
+		// calibrated empirically against that real call frequency to land ~3.1 power-play
+		// opportunities and ~8.4 PIM per team per game, matching the NHL (~3.0-3.4 PPO,
+		// ~8-9 PIM). The original 0.06 produced ~4.4 PPO / ~11 PIM, well above the NHL.
+		const probPenaltyPerPossession = 0.041 * g.get("foulRateFactor");
 
 		if (r > probPenaltyPerPossession) {
 			return;
@@ -1136,11 +1522,21 @@ class GameSim extends GameSimBase {
 			return false;
 		}
 
-		const p = this.pickPlayer(t, "penalties", ["C", "W", "D"]);
+		// Power 2 amplifies the penalties-composite gap so a high-checking enforcer absorbs
+		// most of his team's penalties and disciplined stars take few, overcoming the fact
+		// that stars are on the ice (and thus exposed to penalty rolls) far more
+		const p = this.pickPlayer(t, "penalties", ["C", "W", "D"], 2);
 
 		const penaltyType = penaltyTypes[penalty.type];
 
 		this.penaltyBox.add(t, p, penalty);
+
+		if (penalty.type === "major") {
+			this.majorPenalties.push({
+				pid: p.id,
+				name: penalty.name,
+			});
+		}
 
 		this.recordStat(t, p, "pim", penaltyType.minutes);
 		this.playByPlay.logEvent({
@@ -1204,10 +1600,63 @@ class GameSim extends GameSimBase {
 		}
 	}
 
+	checkGoalieHook(t: TeamNum) {
+		// At most one hook per game per team, and never while the net is empty for an extra attacker
+		if (this.hookedGoalie[t] || this.pulledGoalie[t]) {
+			return;
+		}
+
+		const goalie = this.playersOnIce[t].G[0];
+		if (!goalie) {
+			return;
+		}
+
+		const backup = this.backupGoalies[t];
+		if (
+			!backup ||
+			backup === goalie ||
+			backup.injured ||
+			this.penaltyBox.has(t, backup) ||
+			// A "backup" who is dressed as a skater (pathological roster with too few goalies) cannot take the net
+			this.lines[t].F.flat().includes(backup) ||
+			this.lines[t].D.flat().includes(backup) ||
+			Object.values(this.playersOnIce[t]).flat().includes(backup)
+		) {
+			return;
+		}
+
+		const ga = goalie.stat.ga;
+		const shots = ga + goalie.stat.sv;
+		const saveFraction = shots > 0 ? goalie.stat.sv / shots : 1;
+		const period = this.team[0].stat.ptsQtrs.length;
+
+		const shouldHook =
+			ga >= GOALIE_HOOK.gaAnytime ||
+			(ga >= GOALIE_HOOK.gaPoorSv &&
+				saveFraction < GOALIE_HOOK.poorSvFraction) ||
+			(period === 1 &&
+				ga >= GOALIE_HOOK.gaFirstPeriod &&
+				saveFraction < GOALIE_HOOK.firstPeriodSvFraction);
+
+		if (shouldHook) {
+			this.updatePlayersOnIce({
+				type: "goalieHook",
+				t,
+			});
+		}
+	}
+
 	simPossession(special?: "rebound") {
 		if (!special) {
 			if (this.isHit()) {
-				this.doHit();
+				const fight = this.doHit();
+
+				if (fight) {
+					// Like a penalty, a fight stops play and leads to a faceoff
+					this.faceoff();
+					return;
+				}
+
 				if (this.advanceClock()) {
 					return;
 				}
@@ -1284,6 +1733,39 @@ class GameSim extends GameSimBase {
 		}
 	}
 
+	// A unit whose best creator and best finisher are on par plays above the sum of its parts; a line of three snipers (or a pair of two offensive defensemen) plays below it. Centered so a typical mixed unit is near 0.
+	getLineComplementarity(t: TeamNum) {
+		const forwards = [...this.playersOnIce[t].C, ...this.playersOnIce[t].W];
+		const defensemen = this.playersOnIce[t].D;
+
+		let complementarity = 0;
+
+		if (forwards.length >= 2) {
+			let bestPlaymaker = 0;
+			let bestSniper = 0;
+			for (const p of forwards) {
+				bestPlaymaker = Math.max(bestPlaymaker, p.compositeRating.playmaker);
+				bestSniper = Math.max(bestSniper, p.compositeRating.sniper);
+			}
+
+			complementarity += 0.1 * (0.15 - Math.abs(bestPlaymaker - bestSniper));
+		}
+
+		if (defensemen.length >= 2) {
+			let bestOffensive = 0;
+			let bestDefensive = 0;
+			for (const p of defensemen) {
+				bestOffensive = Math.max(bestOffensive, p.compositeRating.playmaker);
+				bestDefensive = Math.max(bestDefensive, p.compositeRating.blocking);
+			}
+
+			complementarity += 0.1 * (0.15 - Math.abs(bestOffensive - bestDefensive));
+		}
+
+		// Each term caps at +0.015, so the positive side tops out at +0.03; only the negative side can hit its clamp
+		return helpers.bound(complementarity, -0.05, 0.03);
+	}
+
 	updateTeamCompositeRatings() {
 		for (const t of teamNums) {
 			let synergy = 0;
@@ -1293,6 +1775,10 @@ class GameSim extends GameSimBase {
 				}
 			}
 			synergy /= 500; // 0 to 1 scale
+
+			// Linemate complementarity moves the whole unit's effective strength, which flows into the composite ratings below, the shot quality factor in doShot, and (squared, since both teams' composites carry reciprocal ratios) the giveaway/takeaway probabilities
+			synergy *= 1 + this.getLineComplementarity(t);
+
 			this.team[t].synergy.reb = synergy;
 		}
 
@@ -1319,21 +1805,10 @@ class GameSim extends GameSimBase {
 					W: 0.5,
 					C: 0.25,
 				},
-				synergyFactor: this.synergyFactor,
+				// This composite only decides which team TAKES the penalty (higher = worse), so scaling it by on-ice strength would perversely punish the better unit
+				synergyFactor: 0,
 				synergyRatio,
 				valFunc: (p) => p.compositeRating.penalties / 2,
-			});
-
-			this.team[t].compositeRating.penalties = getCompositeFactor({
-				playersOnIce: this.playersOnIce[t],
-				positions: {
-					D: 1,
-					W: 0.5,
-					C: 0.25,
-				},
-				synergyFactor: this.synergyFactor,
-				synergyRatio,
-				valFunc: (p) => p.compositeRating.enforcer / 2,
 			});
 
 			this.team[t].compositeRating.puckControl = getCompositeFactor({
@@ -1391,14 +1866,19 @@ class GameSim extends GameSimBase {
 		pos: "F" | "D",
 		playersRemainingOn: PlayerGameSim[],
 	) {
-		let nextLine =
+		// Never pick a player who is in the penalty box or already on the ice
+		const isAvailable = (p: PlayerGameSim) =>
+			!this.penaltyBox.has(t, p) && !playersRemainingOn.includes(p);
+
+		const nextLine =
 			this.lines[t][pos][(this.currentLine[t][pos] + 1) % NUM_LINES[pos]]!;
-		if (nextLine.length === 0 && this.currentLine[t][pos] !== 0) {
-			// This could happen if a line is empty due to a ton of injuries
-			nextLine = this.lines[t][pos][0]!;
+		let candidates = nextLine.filter(isAvailable);
+		if (candidates.length === 0 && this.currentLine[t][pos] !== 0) {
+			// This could happen if a line is empty due to a ton of injuries, or entirely in the penalty box
+			candidates = this.lines[t][pos][0]!.filter(isAvailable);
 		}
 
-		if (nextLine.length === 0) {
+		if (candidates.length === 0) {
 			// This could happen if a player gets a penalty while being on the only healthy line remaining due to many injuries
 			let emergencyPlayers = [];
 			for (const existingLines of Object.values(this.lines[t])) {
@@ -1406,11 +1886,13 @@ class GameSim extends GameSimBase {
 					emergencyPlayers.push(...existingLine);
 				}
 			}
-			emergencyPlayers = emergencyPlayers.filter(
-				(p) => !playersRemainingOn.includes(p),
-			);
+			emergencyPlayers = emergencyPlayers.filter(isAvailable);
 			if (emergencyPlayers.length === 0) {
 				// This could happen if everyone is injured resulting in lines not having players
+				emergencyPlayers = this.team[t].depth[pos].filter(isAvailable);
+			}
+			if (emergencyPlayers.length === 0) {
+				// Last resort, should not happen: accept a boxed player rather than nobody
 				emergencyPlayers = this.team[t].depth[pos].filter(
 					(p) => !playersRemainingOn.includes(p),
 				);
@@ -1418,7 +1900,63 @@ class GameSim extends GameSimBase {
 			return choice(emergencyPlayers);
 		}
 
-		return choice(nextLine);
+		return choice(candidates);
+	}
+
+	// In 3-on-3 overtime, a penalty gives the power play team an EXTRA skater rather than costing the penalized team one - each side ices 3 plus the opponent's box count, capped at 5 (NHL rule 84.3). So one penalty is 4-on-3, offsetting penalties are 4-on-4, 2-1 is 5-on-4 - no team ever ices fewer than 3 skaters
+	getThreeOnThreeComposition(t: TeamNum) {
+		const t2 = t === 0 ? 1 : 0;
+		const numSkaters = Math.min(5, 3 + this.penaltyBox.count(t2));
+		const numD = numSkaters === 5 ? 2 : 1;
+
+		return {
+			F: numSkaters - numD,
+			D: numD,
+		};
+	}
+
+	// NHL coaches send their best offensive skaters in 3-on-3 overtime rather than rolling regular lines. Weighted random picks from the top of the pool (with fatigue) rotate the overtime units.
+	pickThreeOnThreeSkaters(
+		t: TeamNum,
+		pos: "F" | "D",
+		numNeeded: number,
+		playersRemainingOn: PlayerGameSim[],
+	) {
+		const otRating = (p: PlayerGameSim) =>
+			((p.compositeRating.scoring + p.compositeRating.playmaker) / 2) *
+			fatigue(p.stat.energy);
+
+		const candidates = this.lines[t][pos]
+			.flat()
+			.filter(
+				(p) => !this.penaltyBox.has(t, p) && !playersRemainingOn.includes(p),
+			);
+
+		const pool = orderBy(candidates, otRating, "desc").slice(
+			0,
+			THREE_ON_THREE_POOL_SIZE[pos],
+		);
+
+		const skaters: PlayerGameSim[] = [];
+		while (skaters.length < numNeeded && pool.length > 0) {
+			const p = choice(pool, (p2) => otRating(p2) ** 2);
+			skaters.push(p);
+			pool.splice(pool.indexOf(p), 1);
+		}
+
+		// Emergency fallback, like if too many players are injured or in the penalty box
+		while (skaters.length < numNeeded) {
+			const p = this.getPlayerFromNextLine(t, pos, [
+				...skaters,
+				...playersRemainingOn,
+			]);
+			if (!p || skaters.includes(p)) {
+				break;
+			}
+			skaters.push(p);
+		}
+
+		return skaters;
 	}
 
 	doLineChange(
@@ -1430,18 +1968,22 @@ class GameSim extends GameSimBase {
 		this.currentLine[t][pos] += 1;
 
 		if (!this.allStarGame) {
-			// Sometimes skip the 3rd line of forwards
-			if (
-				pos === "F" &&
-				this.currentLine[t][pos] === 2 &&
-				Math.random() < 0.1
-			) {
-				this.currentLine[t][pos] = 0;
-			}
+			const { powerPlayTeam } = this.penaltyBox.getPowerPlayTeam();
+			if (powerPlayTeam === t) {
+				// On the power play, send out a top unit (like PP1/PP2 in real life) rather than continuing the normal rotation
+				this.currentLine[t][pos] = Math.random() < 0.75 ? 0 : 1;
+			} else if (pos === "F") {
+				// Sometimes skip the 3rd line of forwards, giving the shift back to the
+				// top line (kept light so the 3rd line still gets real minutes)
+				if (this.currentLine[t][pos] === 2 && Math.random() < 0.15) {
+					this.currentLine[t][pos] = 0;
+				}
 
-			// Sometimes skip the 4th line of forwards
-			if (pos === "F" && this.currentLine[t][pos] >= 3 && Math.random() < 0.5) {
-				this.currentLine[t][pos] = 0;
+				// Sometimes skip the 4th line of forwards. Less aggressive than before so
+				// the 4th line plays an NHL-like ~9-11 min instead of being scratched
+				if (this.currentLine[t][pos] >= 3 && Math.random() < 0.35) {
+					this.currentLine[t][pos] = 0;
+				}
 			}
 		}
 
@@ -1454,13 +1996,27 @@ class GameSim extends GameSimBase {
 		newLine = [...newLine];
 		for (const [i, p] of newLine.entries()) {
 			if (this.penaltyBox.has(t, p) || playersRemainingOn.includes(p)) {
-				newLine[i] = this.getPlayerFromNextLine(t, pos, playersRemainingOn);
+				// Also exclude the rest of newLine, so a replacement can't duplicate a player already slated to be on the ice
+				newLine[i] = this.getPlayerFromNextLine(t, pos, [
+					...playersRemainingOn,
+					...newLine,
+				]);
 			}
 		}
 
 		if (pos === "F") {
 			const penaltyBoxCount = this.penaltyBox.count(t);
-			if (
+			if (this.threeOnThree && !this.pulledGoalie[t]) {
+				// 2 forwards at 3-on-3, 3 on a 4-on-3 or 5-on-3 power play. Handles any penalty box count, so the "Not implemented" throw below is unreachable in overtime.
+				const otForwards = this.pickThreeOnThreeSkaters(
+					t,
+					pos,
+					this.getThreeOnThreeComposition(t).F,
+					playersRemainingOn,
+				);
+				this.playersOnIce[t].C = otForwards.slice(0, 1);
+				this.playersOnIce[t].W = otForwards.slice(1);
+			} else if (
 				penaltyBoxCount === 0 ||
 				(this.pulledGoalie[t] && penaltyBoxCount === 1)
 			) {
@@ -1511,7 +2067,17 @@ class GameSim extends GameSimBase {
 				);
 			}
 		} else {
-			this.playersOnIce[t].D = newLine;
+			if (this.threeOnThree && !this.pulledGoalie[t]) {
+				// 1 defenseman at 3-on-3 and 4-on-3, 2 on a 5-on-3 power play
+				this.playersOnIce[t].D = this.pickThreeOnThreeSkaters(
+					t,
+					pos,
+					this.getThreeOnThreeComposition(t).D,
+					playersRemainingOn,
+				);
+			} else {
+				this.playersOnIce[t].D = newLine;
+			}
 		}
 
 		let actualNewLine;
@@ -1537,7 +2103,7 @@ class GameSim extends GameSimBase {
 					t: TeamNum;
 			  }
 			| {
-					type: "pullGoalie" | "noPullGoalie";
+					type: "pullGoalie" | "noPullGoalie" | "goalieHook";
 					t: TeamNum;
 			  },
 	) {
@@ -1553,6 +2119,15 @@ class GameSim extends GameSimBase {
 				// No need to track shft here because updatePlayersOnIce will be called with newPeriod anyway. So actually, this "starters" mode of updatePlayersOnIce could be eliminated as long as gs was tracked properly in the first newPeriod call.
 			} else if (options.type === "penaltyOver") {
 				if (options.t !== t) {
+					continue;
+				}
+
+				// At 3-on-3 with stacked penalties the team can already be at the full 5 skaters (impossible in regulation, where a penalized team ices at most 4) - then the released player waits for the next line change instead of becoming a 6th skater
+				const numSkaters =
+					this.playersOnIce[t].C.length +
+					this.playersOnIce[t].W.length +
+					this.playersOnIce[t].D.length;
+				if (!this.pulledGoalie[t] && numSkaters >= 5) {
 					continue;
 				}
 
@@ -1587,6 +2162,29 @@ class GameSim extends GameSimBase {
 				});
 
 				this.pulledGoalie[t] = true;
+				substitutions = true;
+			} else if (options.type === "goalieHook") {
+				if (options.t !== t) {
+					continue;
+				}
+
+				const backup = this.backupGoalies[t];
+				if (!backup) {
+					throw new Error("goalieHook failed - no backup goalie");
+				}
+
+				// Mutating lines.G too keeps the shootout and noPullGoalie paths pointing at the relief goalie
+				this.lines[t].G[0] = [backup];
+				this.playersOnIce[t].G = [backup];
+
+				this.playByPlay.logEvent({
+					type: "goalieHook",
+					clock: this.clock,
+					t,
+					name: backup.name,
+				});
+
+				this.hookedGoalie[t] = true;
 				substitutions = true;
 			} else if (options.type === "noPullGoalie") {
 				if (options.t !== t) {

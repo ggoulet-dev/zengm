@@ -4,7 +4,7 @@ import { g } from "../../util/index.ts";
 import type { PlayerWithoutKey } from "../../../common/types.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { minBy } from "../../../common/utils.ts";
-import { randInt, shuffle } from "../../../common/random.ts";
+import { randInt, shuffle, uniform } from "../../../common/random.ts";
 import { defaultGameAttributes } from "../../../common/defaultGameAttributes.ts";
 
 // To improve the distribution of DP ages in leagues with modified draftAges, this code will change the % of players who declare for draft each year to work better with modified draftAges settings. Previously, it was just a constant defaultFractionPerYear.
@@ -168,18 +168,50 @@ const genPlayersWithoutSaving = async (
 		}
 	}
 
-	// Small chance of making top 4 players (in 70 player draft) special - on average, one per draft class
 	if (existingPlayers.length === 0) {
-		const numSpecialPlayerChances = Math.round((4 / 70) * numPlayers);
-
-		for (let i = 0; i < numSpecialPlayerChances; i++) {
-			if (Math.random() < 1 / numSpecialPlayerChances) {
-				const p = enteringDraft[i];
-				if (!p) {
-					throw new Error("Should never happen");
+		if (isSport("hockey")) {
+			// Deepen the top of the draft. enteringDraft now holds the whole class;
+			// the real draft order is decided later by team value (which tracks pot),
+			// so boosting the highest-pot prospects shapes who goes near the top. A
+			// first round should hold several genuine blue-chip prospects, not just
+			// one, so apply a boost that decays smoothly across the first round (picks
+			// 1-5 become clear stars, the rest of round one is lifted a little). Per-
+			// class variance makes some drafts deeper than others, and ~1 in 3 classes
+			// gets a generational #1.
+			const byPot = [...enteringDraft].sort(
+				(a, b) => b.ratings.at(-1)!.pot - a.ratings.at(-1)!.pot,
+			);
+			// Scale to league size so the boost tapers out by the end of the first
+			// round (numActiveTeams picks) rather than a fixed pick number.
+			const firstRoundSize = g.get("numActiveTeams");
+			const classStrength = uniform(0.8, 1.2);
+			const generational = Math.random() < 0.35;
+			const topTier = Math.min(byPot.length, firstRoundSize + 8);
+			const decay = firstRoundSize * 0.55;
+			for (let rank = 0; rank < topTier; rank++) {
+				let amount = 5 * Math.exp(-rank / decay) * classStrength;
+				if (rank === 0 && generational) {
+					amount += randInt(3, 6);
 				}
-				player.bonus(p);
-				await player.develop(p, 0); // Recalculate ovr/pot
+				const rounded = Math.round(amount);
+				if (rounded > 0) {
+					player.bonus(byPot[rank]!, rounded);
+					await player.develop(byPot[rank]!, 0); // Recalculate ovr/pot
+				}
+			}
+		} else {
+			// Small chance of making top 4 players (in 70 player draft) special - on average, one per draft class
+			const numSpecialPlayerChances = Math.round((4 / 70) * numPlayers);
+
+			for (let i = 0; i < numSpecialPlayerChances; i++) {
+				if (Math.random() < 1 / numSpecialPlayerChances) {
+					const p = enteringDraft[i];
+					if (!p) {
+						throw new Error("Should never happen");
+					}
+					player.bonus(p);
+					await player.develop(p, 0); // Recalculate ovr/pot
+				}
 			}
 		}
 	}

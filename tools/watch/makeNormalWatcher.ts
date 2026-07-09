@@ -7,10 +7,12 @@ export const makeNormalWatcher = ({
 	build,
 	outFilename,
 	watchFiles,
+	ignored,
 }: {
 	build: (sport: Sport, signal: AbortSignal) => void;
 	outFilename: string;
 	watchFiles: string | string[];
+	ignored?: (path: string) => boolean;
 }) => {
 	return async (
 		initialSport: Sport,
@@ -40,7 +42,7 @@ export const makeNormalWatcher = ({
 			}
 		};
 
-		const watcher = watch(watchFiles, {});
+		const watcher = watch(watchFiles, ignored ? { ignored } : {});
 		watcher.on("change", async () => {
 			await buildWrapped(currentSport);
 		});

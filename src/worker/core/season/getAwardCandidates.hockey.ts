@@ -13,7 +13,7 @@ const getAwardCandidates = async (season: number) => {
 
 	const awardCandidates = [
 		{
-			name: "Most Valuable Player",
+			name: "Hart Memorial Trophy",
 			players: getTopPlayers(
 				{
 					amount: 10,
@@ -24,10 +24,11 @@ const getAwardCandidates = async (season: number) => {
 			stats: ["keyStats", "ps"],
 		},
 		{
-			name: "Defensive Player of the Year",
+			name: "Norris Trophy",
 			players: getTopPlayers(
 				{
 					amount: 10,
+					filter: (p) => p.pos === "D",
 					score: dpoyScore,
 				},
 				players,
@@ -35,7 +36,7 @@ const getAwardCandidates = async (season: number) => {
 			stats: ["tk", "hit", "dps"],
 		},
 		{
-			name: "Defensive Forward of the Year",
+			name: "Selke Trophy",
 			players: getTopPlayers(
 				{
 					amount: 10,
@@ -47,7 +48,7 @@ const getAwardCandidates = async (season: number) => {
 			stats: ["tk", "hit", "dps"],
 		},
 		{
-			name: "Goalie of the Year",
+			name: "Vezina Trophy",
 			players: getTopPlayers(
 				{
 					amount: 10,
@@ -58,7 +59,7 @@ const getAwardCandidates = async (season: number) => {
 			stats: ["gpGoalie", "gaa", "svPct", "gps"],
 		},
 		{
-			name: "Rookie of the Year",
+			name: "Calder Memorial Trophy",
 			players: getTopPlayers(
 				{
 					amount: 10,

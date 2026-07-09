@@ -670,6 +670,7 @@ export type GameAttributesLeague = {
 				type: "players";
 				startingSeason: number;
 		  };
+	rfa: boolean;
 	riggedLottery?: (number | null)[];
 	rookieContractLengths: number[];
 	rookiesCanRefuse: boolean;
@@ -754,6 +755,7 @@ export type GameAttributesLeague = {
 	onsideFactor: number;
 	onsideRecoveryFactor: number;
 	hitFactor: number;
+	fightFactor: number;
 	giveawayFactor: number;
 	takeawayFactor: number;
 	deflectionFactor: number;
@@ -1213,6 +1215,8 @@ export type PlayerWithoutKey<PlayerRatings = MinimalPlayerRatings> = {
 	real?: boolean;
 	relatives: Relative[];
 	retiredYear: number;
+	// Hockey RFA: team holding this restricted free agent's rights (set when a qualifying offer is tendered, deleted when the player signs)
+	rfaTid?: number;
 	rosterOrder: number;
 	salaries: PlayerSalary[];
 	srID?: string;

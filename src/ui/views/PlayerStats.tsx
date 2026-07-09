@@ -4,11 +4,12 @@ import useTitleBar from "../hooks/useTitleBar.tsx";
 import { helpers } from "../util/helpers.ts";
 import { getCols } from "../../common/getCols.ts";
 import type { View } from "../../common/types.ts";
-import { isSport } from "../../common/sportFunctions.ts";
+import { bySport, isSport } from "../../common/sportFunctions.ts";
 import { wrappedAgeAtDeath } from "../components/AgeAtDeath.tsx";
 import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels.tsx";
 import { expandFieldingStats } from "../util/expandFieldingStats.baseball.ts";
 import type { DataTableRow } from "../components/DataTable/index.tsx";
+import type { FooterRow } from "../components/DataTable/Footer.tsx";
 import { PlusMinus } from "../components/PlusMinus.tsx";
 import { useLocal } from "../util/local.ts";
 
@@ -61,6 +62,45 @@ export const formatStatGameHigh = (
 
 	return helpers.roundStat(ps[stat], stat, statType === "totals");
 };
+
+// Rate/average stats, where summing the column across all players makes no sense. Stats matching the patterns in summableStat (percentages, per-X rates, game highs, longest plays) are excluded automatically and don't need to be listed here.
+const NON_SUMMABLE_STATS = bySport<string[]>({
+	baseball: [
+		"ba",
+		"obp",
+		"slg",
+		"ops",
+		"winp",
+		"era",
+		"ip",
+		"inn",
+		"fip",
+		"whip",
+		"h9",
+		"hr9",
+		"bb9",
+		"so9",
+		"pc9",
+		"sow",
+		"fldp",
+		"rf9",
+		"rfg",
+		"csp",
+		"babip",
+		"iso",
+	],
+	basketball: ["fgp", "tpp", "2pp", "efg", "ftp"],
+	football: ["qbRat", "pbwr", "rbwr"],
+	hockey: ["foPct", "sPct", "svPct", "ppPct", "gaa", "amin"],
+});
+
+const summableStat = (stat: string) =>
+	!stat.endsWith("Max") &&
+	!stat.endsWith("60") &&
+	!stat.endsWith("Lng") &&
+	!stat.includes("Pct") &&
+	!stat.includes("Per") &&
+	!NON_SUMMABLE_STATS.includes(stat);
 
 const PlayerStats = ({
 	abbrev,
@@ -223,6 +263,45 @@ const PlayerStats = ({
 		};
 	});
 
+	// In basketball, only the "totals" stat type contains stats that can be summed across all players
+	let footer: FooterRow | undefined;
+	if (players.length > 0 && (!isSport("basketball") || statType === "totals")) {
+		const statSums = stats.map((stat) => {
+			if (!summableStat(stat)) {
+				return null;
+			}
+
+			let sum = 0;
+			let numValues = 0;
+			for (const p of players) {
+				const value = p.stats[stat];
+				if (typeof value === "number" && !Number.isNaN(value)) {
+					sum += value;
+					numValues += 1;
+				}
+			}
+
+			if (numValues === 0) {
+				return null;
+			}
+
+			return helpers.roundStat(sum, stat, true);
+		});
+
+		if (statSums.some((value) => value !== null)) {
+			footer = {
+				data: [
+					"Total",
+					null,
+					null,
+					null,
+					...(season === "all" ? [null] : []),
+					...statSums,
+				],
+			};
+		}
+	}
+
 	return (
 		<>
 			<MoreLinks
@@ -244,6 +323,7 @@ const PlayerStats = ({
 				cols={cols}
 				defaultSort={[sortCol, "desc"]}
 				defaultStickyCols={window.mobile ? 0 : 1}
+				footer={footer}
 				name={`PlayerStats${statType}`}
 				rows={rows}
 				superCols={superCols}

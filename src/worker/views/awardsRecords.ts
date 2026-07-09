@@ -258,27 +258,27 @@ const optionsTmp = bySport({
 			key: "champion",
 		},
 		{
-			val: "Most Valuable Player",
+			val: "Hart Memorial Trophy",
 			key: "mvp",
 		},
 		{
-			val: "Playoffs MVP",
+			val: "Conn Smythe Trophy",
 			key: "finals_mvp",
 		},
 		{
-			val: "Defensive Player of the Year",
+			val: "Norris Trophy",
 			key: "dpoy",
 		},
 		{
-			val: "Defensive Forward of the Year",
+			val: "Selke Trophy",
 			key: "dfoy",
 		},
 		{
-			val: "Goalie of the Year",
+			val: "Vezina Trophy",
 			key: "goy",
 		},
 		{
-			val: "Rookie of the Year",
+			val: "Calder Memorial Trophy",
 			key: "roy",
 		},
 		{
@@ -302,11 +302,11 @@ const optionsTmp = bySport({
 			key: "all_star_mvp",
 		},
 		{
-			val: "League Points Leader",
+			val: "Art Ross Trophy",
 			key: "pts_leader",
 		},
 		{
-			val: "League Goals Leader",
+			val: "Maurice Richard Trophy",
 			key: "g_leader",
 		},
 		{

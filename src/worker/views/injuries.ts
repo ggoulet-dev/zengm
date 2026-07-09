@@ -5,6 +5,7 @@ import { getPlayers } from "./playerRatings.ts";
 import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { idb } from "../db/index.ts";
 import { getActualPlayThroughInjuries } from "../core/game/loadTeams.ts";
+import { getEffectivePlayThroughInjuries } from "../core/game/suspension.hockey.ts";
 import { actualPhase } from "../util/actualPhase.ts";
 import { bySport } from "../../common/sportFunctions.ts";
 
@@ -79,9 +80,16 @@ const updateInjuries = async (
 			}
 
 			for (const injury of injuries) {
-				const cutoff = playingThrough[injury.tid];
-				if (cutoff !== undefined && injury.games <= cutoff) {
-					injury.playingThrough = true;
+				let cutoff = playingThrough[injury.tid];
+				if (cutoff !== undefined) {
+					// Suspensions are never played through (hockey), so the view must agree with loadTeams
+					cutoff = getEffectivePlayThroughInjuries(
+						{ type: injury.type, gamesRemaining: injury.games },
+						cutoff,
+					);
+					if (injury.games <= cutoff) {
+						injury.playingThrough = true;
+					}
 				}
 			}
 		}

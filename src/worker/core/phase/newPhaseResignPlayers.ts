@@ -14,6 +14,10 @@ import { last, orderBy } from "../../../common/utils.ts";
 import { getNumPlayersTradedAwayNormalizedAll } from "../player/getNumPlayersTradedAwayNormalized.ts";
 import { bySport } from "../../../common/sportFunctions.ts";
 import { ValueChangeCalculator } from "../team/ValueChangeCalculator.ts";
+import {
+	isRfaEligible,
+	tenderQualifyingOffer,
+} from "../freeAgents/rfa.hockey.ts";
 
 export const FREE_AGENCY_DAYS = 30;
 
@@ -158,6 +162,9 @@ const newPhaseResignPlayers = async (
 			p.contract.rookieResign = true;
 		}
 
+		// Hockey RFA: a rostered player should never carry rights; clear any stale value before deciding anew below
+		delete p.rfaTid;
+
 		const draftPick = p.draft.year === g.get("season");
 
 		if (draftPick && !g.get("draftPickAutoContract")) {
@@ -178,6 +185,11 @@ const newPhaseResignPlayers = async (
 			!g.get("spectator")
 		) {
 			const tid = p.tid;
+
+			// Hockey RFA: auto-tender a qualifying offer to keep exclusive rights through free agency. Canceling the negotiation renounces the rights.
+			if (!draftPick && isRfaEligible(p)) {
+				tenderQualifyingOffer(p, tid);
+			}
 
 			player.addToFreeAgents(p, numPlayersTradedAwayNormalized);
 
@@ -238,6 +250,39 @@ const newPhaseResignPlayers = async (
 				if (draftPick) {
 					reSignPlayer = true;
 				}
+			}
+
+			// Hockey RFA: rather than re-signing now, the AI tenders a qualifying offer and retains exclusive rights through free agency (where offer sheets can happen). Non-tendered players become unrestricted. Tendering ignores the cap/position/willingness gates above - a real qualifying offer costs almost nothing to extend, and a cap-squeezed team would rather collect offer sheet compensation than lose the player for free. Unlike the re-sign path, we do NOT gate on team value here: a young RFA-eligible player is qualified by default, because that is how real teams retain cheap, controllable assets. Only genuine surplus (covered position, better players ahead) or a coin-flip on minimum-salary scrubs is walked - otherwise young depth would leak to unrestricted free agency en masse.
+			if (!draftPick && isRfaEligible(p)) {
+				// Skip tendering some low value players, same as the re-sign path below
+				const skipBadPlayer =
+					contract.amount < g.get("minContract") * 2 && Math.random() < 0.5;
+
+				// Don't tender a surplus player at an already-covered position - non-tendering is how real teams shed extra RFAs
+				const surplusPosition =
+					positionInfo !== undefined &&
+					positionInfo[pos] !== undefined &&
+					positionInfo[pos].count <= 0 &&
+					positionInfo[pos].maxValue > p.value;
+
+				if (!skipBadPlayer && !surplusPosition) {
+					tenderQualifyingOffer(p, p.tid);
+
+					// Reserve cap space and the roster spot for the eventual re-signing, like the sign path below, so the team doesn't fill his slot with worse UFAs
+					if (positionInfo !== undefined && positionInfo[pos] !== undefined) {
+						positionInfo[pos].count -= 1;
+						if (p.value > positionInfo[pos].maxValue) {
+							positionInfo[pos].maxValue = p.value;
+						}
+					}
+
+					if (payroll !== undefined) {
+						payrollsByTid.set(p.tid, p.contract.amount + payroll);
+					}
+				}
+
+				// Tendered or not, the player enters the free agent pool
+				reSignPlayer = false;
 			}
 
 			if (reSignPlayer) {

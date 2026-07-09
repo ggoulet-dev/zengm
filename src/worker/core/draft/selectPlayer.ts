@@ -30,6 +30,9 @@ const selectPlayer = async (dp: DraftPick, pid: number) => {
 	const prevTid = p.tid;
 	p.tid = dp.tid;
 
+	// Hockey RFA: joining a roster (fantasy/expansion draft can pick free agents) ends restricted free agency
+	delete p.rfaTid;
+
 	const expansionDraft = g.get("expansionDraft");
 
 	const fantasyOrExpansionDraft =

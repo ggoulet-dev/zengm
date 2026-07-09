@@ -311,6 +311,8 @@ export const getDefaultSettings = () => {
 			"onsideRecoveryFactor",
 		),
 		hitFactor: unwrapGameAttribute(defaultGameAttributes, "hitFactor"),
+		fightFactor: unwrapGameAttribute(defaultGameAttributes, "fightFactor"),
+		rfa: unwrapGameAttribute(defaultGameAttributes, "rfa"),
 		giveawayFactor: unwrapGameAttribute(
 			defaultGameAttributes,
 			"giveawayFactor",

@@ -33,16 +33,16 @@ const info = {
 	},
 	D: {
 		hgt: [1.5, 1],
-		stre: [4, 1],
-		spd: [1, 1],
+		stre: [3, 1],
+		spd: [2.5, 1],
 		endu: [1, 1],
-		pss: [1, 1],
+		pss: [2.5, 1],
 		wst: [2, 1],
-		sst: [4, 1],
-		stk: [1, 1],
-		oiq: [1, 1],
-		chk: [4, 1],
-		blk: [4, 1],
+		sst: [3, 1],
+		stk: [1.5, 1],
+		oiq: [2.5, 1],
+		chk: [3.5, 1],
+		blk: [3, 1],
 		diq: [4, 1],
 	},
 	G: {
@@ -53,8 +53,16 @@ const info = {
 // Handle some nonlinear interactions
 const bonuses: Partial<Record<Position, (a: PlayerRatings) => number>> = {
 	C: () => 5,
-	W: () => 2,
-	G: (ratings) => -0.2 * ratings.glk,
+	W: () => 3,
+	D: () => 2,
+	// Goalies sit on the original -0.2 * glk suppression (ovr = glk - 10), which
+	// keeps normal goalies from out-ovr'ing skaters. A single rating (glk) also
+	// develops higher than a skater's 13-rating blend, so a flat boost inflates
+	// every goalie. Instead, only truly elite goalies (glk > 88) get an extra
+	// taper on top, so an average goalie is unchanged while a generational one
+	// can still climb past 100 (glk 100 -> ~103).
+	G: (ratings) =>
+		-0.2 * ratings.glk + (ratings.glk > 88 ? 0.85 * (ratings.glk - 88) : 0),
 };
 
 const ovr = (ratings: PlayerRatings, pos?: Position): number => {
@@ -86,7 +94,10 @@ const ovr = (ratings: PlayerRatings, pos?: Position): number => {
 	// Scale 10-90 to 0-100
 	r = -10 + (r * 100) / 80;
 
-	r = helpers.bound(Math.round(r), 0, 100);
+	// Truly dominant players are allowed to exceed 100. The underlying ratings
+	// are capped at 100, so the formula naturally tops out around ~121 for a
+	// skater with maxed ratings; the upper bound here is just a safety rail.
+	r = helpers.bound(Math.round(r), 0, 125);
 
 	return r;
 };

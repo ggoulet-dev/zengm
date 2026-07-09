@@ -21,6 +21,16 @@ import { last } from "../../../common/utils.ts";
 
 const NUM_SIMULATIONS = 20; // Higher is more accurate, but slower. Low accuracy is fine, though!
 
+// Upper bound for a projected potential. Must stay in sync with the per-sport
+// ovr cap (see ovr.SPORT.ts). Hockey lets dominant players exceed 100, so its
+// potential ceiling is raised to match.
+const MAX_POT = bySport({
+	baseball: 100,
+	basketball: 100,
+	football: 100,
+	hockey: 125,
+});
+
 // Repeatedly simulate aging up to 29, and pick the 75th percentile max
 export const monteCarloPot = async ({
 	ratings,
@@ -67,7 +77,7 @@ export const monteCarloPot = async ({
 			return ovr;
 		}
 
-		return helpers.bound(Math.round(pot), 0, 100);
+		return helpers.bound(Math.round(pot), 0, MAX_POT);
 	}
 
 	const maxOvrs = [];

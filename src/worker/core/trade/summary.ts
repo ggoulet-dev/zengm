@@ -6,8 +6,20 @@ import type {
 	TradeSummary,
 	TradeTeams,
 } from "../../../common/types.ts";
-import { orderBy } from "../../../common/utils.ts";
+import { last, orderBy } from "../../../common/utils.ts";
 import isUntradable from "./isUntradable.ts";
+import { bySport } from "../../../common/sportFunctions.ts";
+
+// Minimum number of players a team must keep at each position for a trade to be allowed. Goalies are strict (nobody else can play there), skater positions are looser since the depth chart can shift players around.
+const MIN_PLAYERS_BY_POS = bySport<Record<string, number> | undefined>({
+	hockey: {
+		C: 2,
+		W: 4,
+		D: 3,
+		G: 2,
+	},
+	default: undefined,
+});
 
 const getTeamOvr = async (playersRaw: Player[]) => {
 	const players = await idb.getCopies.playersPlus(playersRaw, {
@@ -59,11 +71,13 @@ const summary = async (teams: TradeTeams): Promise<TradeSummary> => {
 
 	// Calculate properties of the trade
 	const playersAfter: [Player[], Player[]] = [[], []];
+	const rostersBefore: [Player[], Player[]] = [[], []];
 	for (const i of [0, 1] as const) {
 		const playersBefore = await idb.cache.players.indexGetAll(
 			"playersByTid",
 			tids[i],
 		);
+		rostersBefore[i] = playersBefore;
 		let players = orderBy(
 			playersBefore.filter(
 				(p) => pids[i].includes(p.pid) && !isUntradable(p).untradable,
@@ -178,6 +192,44 @@ const summary = async (teams: TradeTeams): Promise<TradeSummary> => {
 			"M",
 		)}.`;
 		s.warningAmount = amountOverCap;
+	}
+
+	if (!s.warning && MIN_PLAYERS_BY_POS) {
+		const countByPos = (players: Player[]) => {
+			const counts: Record<string, number> = {};
+			for (const p of players) {
+				const pos = last(p.ratings).pos;
+				counts[pos] = (counts[pos] ?? 0) + 1;
+			}
+			return counts;
+		};
+
+		for (const i of [0, 1] as const) {
+			const j = i === 0 ? 1 : 0;
+
+			const countsBefore = countByPos(rostersBefore[i]);
+
+			// playersAfter is indexed by the other team, see the loop above
+			const countsAfter = countByPos(playersAfter[j]);
+
+			const problems: string[] = [];
+			for (const [pos, min] of Object.entries(MIN_PLAYERS_BY_POS)) {
+				const after = countsAfter[pos] ?? 0;
+				const before = countsBefore[pos] ?? 0;
+
+				// Only complain if this trade is what brings the team below the minimum, so a team with an already-broken roster can still make unrelated trades
+				if (after < min && after < before) {
+					problems.push(`${pos} (would have ${after}, needs ${min})`);
+				}
+			}
+
+			if (problems.length > 0) {
+				s.warning = `This trade is not allowed because it would leave the ${
+					s.teams[i].name
+				} with too few players at: ${problems.join(", ")}.`;
+				break;
+			}
+		}
 	}
 
 	return s;

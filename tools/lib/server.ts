@@ -1,9 +1,11 @@
 import { createReadStream, existsSync } from "node:fs";
+import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import getPort from "get-port";
 import { styleText } from "node:util";
+import type { LiveReload } from "./liveReload.ts";
 
 const mimeTypes: Record<string, string> = {
 	".bmp": "image/bmp",
@@ -62,8 +64,26 @@ const sendFile = (res: http.ServerResponse, filename: string) => {
 const showStatic = (url: string, res: http.ServerResponse) => {
 	sendFile(res, url.slice(1));
 };
-const showIndex = (res: http.ServerResponse) => {
-	sendFile(res, "index.html");
+const showIndex = async (
+	res: http.ServerResponse,
+	liveReload: LiveReload | undefined,
+) => {
+	if (!liveReload) {
+		sendFile(res, "index.html");
+		return;
+	}
+
+	// Inject the live reload client into the page on the fly, so the build
+	// output stays untouched.
+	try {
+		const html = await fs.readFile(path.join(BUILD_DIR, "index.html"), "utf8");
+		res.setHeader("Cache-Control", "no-cache");
+		res.writeHead(200, { "Content-Type": "text/html" });
+		res.end(liveReload.injectInto(html));
+	} catch {
+		res.writeHead(404, { "Content-Type": "text/plain" });
+		res.end("404 Not Found");
+	}
 };
 
 // https://stackoverflow.com/a/15075395/786644
@@ -110,14 +130,24 @@ const styleUrl = (url: string) => {
 export const startServer = async ({
 	exposeToNetwork,
 	waitForBuild,
+	liveReload,
 }: {
 	exposeToNetwork: boolean;
 	waitForBuild: (() => Promise<void> | undefined) | undefined;
+	liveReload?: LiveReload;
 }) => {
 	const port = await getPort({ port: 3000 });
 	const localUrl = `http://localhost:${port}`;
 
 	const server = http.createServer(async (req, res) => {
+		const { pathname } = new URL(req.url!, localUrl);
+
+		// The live reload stream must stay open and must not wait on a build.
+		if (liveReload && pathname === liveReload.endpoint) {
+			liveReload.openStream(req, res);
+			return;
+		}
+
 		if (waitForBuild) {
 			const wait = waitForBuild();
 			if (wait) {
@@ -125,12 +155,10 @@ export const startServer = async ({
 			}
 		}
 
-		const { pathname } = new URL(req.url!, localUrl);
-
 		if (PREFIXES_STATIC.some((prefix) => pathname.startsWith(prefix))) {
 			showStatic(pathname, res);
 		} else {
-			showIndex(res);
+			await showIndex(res, liveReload);
 		}
 	});
 

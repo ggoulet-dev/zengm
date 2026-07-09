@@ -7,10 +7,19 @@ import { TOO_MANY_TEAMS_TOO_SLOW } from "../season/getInitialNumGamesConfDivSett
 import { last, orderBy } from "../../../common/utils.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { choice, randInt, shuffle, uniform } from "../../../common/random.ts";
+import { getRfaRightsTid, RFA_DEMAND_FACTOR } from "./rfa.hockey.ts";
 
 const TEMP = 0.35;
 const LEARNING_RATE = 0.5;
 const DEFAULT_ROUNDS = 60;
+
+// Hockey only: the bidding auction runs away when the league has lots of cap
+// space, bidding even mid-tier free agents all the way up to the individual max
+// contract. Cap each demand at a multiple of the rating/age-based genContract
+// value, so only genuine stars (whose genContract already sits near the max) can
+// reach it. The auction can still settle BELOW this in a tight market - this
+// only removes the unrealistic upside, it never raises a demand.
+const HOCKEY_DEMAND_CEILING_FACTOR = 1.25;
 
 const getExpiration = (
 	p: Player,
@@ -48,6 +57,25 @@ const getExpiration = (
 	}
 
 	return g.get("season") + years + offset;
+};
+
+// Hockey RFA: a tendered RFA is committed money - his rights team is expected to re-sign him, but he sits in the free agent pool so getPayroll doesn't see him. Without reserving his salary, every team's young core looks like cap space and the auction inflates all demands league-wide.
+export const reserveTenderedRfaSalaries = (
+	teams: { tid: number; payroll: number }[],
+	playerInfos: {
+		contractAmount: number;
+		p: Parameters<typeof getRfaRightsTid>[0];
+	}[],
+) => {
+	for (const info of playerInfos) {
+		const rightsTid = getRfaRightsTid(info.p);
+		if (rightsTid !== undefined) {
+			const t = teams.find((t2) => t2.tid === rightsTid);
+			if (t) {
+				t.payroll += info.contractAmount;
+			}
+		}
+	}
 };
 
 const stableSoftmax = (values: number[], param: number) => {
@@ -195,6 +223,10 @@ const normalizeContractDemands = async ({
 			return contract.exp > season;
 		});
 		t.payroll = await team.getPayroll(contracts);
+	}
+
+	if (type === "freeAgentsOnly" || type === "includeExpiringContracts") {
+		reserveTenderedRfaSalaries(teams, playerInfos);
 	}
 
 	//console.time("foo");
@@ -386,6 +418,17 @@ const normalizeContractDemands = async ({
 
 		let amount = info.contractAmount;
 
+		// Hockey: cap the auctioned demand at a value-based ceiling (see
+		// HOCKEY_DEMAND_CEILING_FACTOR) so a cap-rich league can't inflate
+		// mid-tier players up to the max contract.
+		if (isSport("hockey")) {
+			amount = Math.min(
+				amount,
+				player.genContract(p, false, true).amount *
+					HOCKEY_DEMAND_CEILING_FACTOR,
+			);
+		}
+
 		// HACK - assume within first 3 years it is a rookie contract. Only need to check players with draftPickAutoContract disabled, because otherwise there is other code handling rookie contracts.
 		let labelAsRookieContract = rookieSalaries && p.draft.year === season;
 		if (
@@ -407,6 +450,11 @@ const normalizeContractDemands = async ({
 				p.contract.exp = season;
 				info.contractAmount = (info.contractAmount + maxContract / 4) / 2;
 			}
+		}
+
+		// Hockey RFA: a tendered RFA keeps asking bridge-deal money, not the open-market auction price - only his rights team can sign him anyway
+		if (getRfaRightsTid(p) !== undefined) {
+			amount *= RFA_DEMAND_FACTOR;
 		}
 
 		amount = helpers.bound(

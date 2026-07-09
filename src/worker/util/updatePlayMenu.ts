@@ -140,6 +140,9 @@ const updatePlayMenu = async () => {
 			url: helpers.leagueUrl(["history"]),
 			label: "View season summary",
 		},
+		autoPlayUntilNextDraft: {
+			label: "Sim one season (stop before draft)",
+		},
 		stopAuto: {
 			label: `Stop auto play (${autoPlaySeasonsLeft} season${
 				autoPlaySeasonsLeft === 1 ? "" : "s"
@@ -317,6 +320,16 @@ const updatePlayMenu = async () => {
 	} else if (g.get("phase") === PHASE.FREE_AGENCY) {
 		// Offseason - free agency
 		keys = ["day", "week", "untilPreseason"];
+	}
+
+	if (
+		g.get("spectator") &&
+		!g.get("repeatSeason") &&
+		!g.get("forceHistoricalRosters") &&
+		g.get("phase") >= PHASE.PRESEASON &&
+		g.get("phase") !== PHASE.DRAFT
+	) {
+		keys.push("autoPlayUntilNextDraft");
 	}
 
 	const unreadMessage = await lock.unreadMessage();

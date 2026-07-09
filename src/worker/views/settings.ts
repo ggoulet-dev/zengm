@@ -133,6 +133,8 @@ type Key =
 	| "onsideFactor"
 	| "onsideRecoveryFactor"
 	| "hitFactor"
+	| "fightFactor"
+	| "rfa"
 	| "giveawayFactor"
 	| "takeawayFactor"
 	| "deflectionFactor"
@@ -355,6 +357,8 @@ const updateSettings = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			onsideFactor: g.get("onsideFactor"),
 			onsideRecoveryFactor: g.get("onsideRecoveryFactor"),
 			hitFactor: g.get("hitFactor"),
+			fightFactor: g.get("fightFactor"),
+			rfa: g.get("rfa"),
 			giveawayFactor: g.get("giveawayFactor"),
 			takeawayFactor: g.get("takeawayFactor"),
 			deflectionFactor: g.get("deflectionFactor"),

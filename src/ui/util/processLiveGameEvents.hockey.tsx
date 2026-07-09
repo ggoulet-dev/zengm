@@ -56,11 +56,18 @@ const getText = (
 		const overtimes = event.quarter - boxScore.numPeriods;
 		text = `Start of ${
 			overtimes === 1 ? "" : `${helpers.ordinal(overtimes)} `
-		} overtime`;
+		} overtime${event.threeOnThree ? " (3-on-3)" : ""}`;
 	} else if (event.type === "gameOver") {
 		text = "End of game";
 	} else if (event.type === "hit") {
 		text = `${event.names[0]} hit ${event.names[1]}`;
+	} else if (event.type === "fight") {
+		text = (
+			<span className="text-danger">
+				Fight! {event.names[0]} and {event.names[1]} drop the gloves, and{" "}
+				{event.names[0]} gets the better of it. Five minutes each for fighting
+			</span>
+		);
 	} else if (event.type === "gv") {
 		text = `Giveaway by ${event.names[0]}`;
 	} else if (event.type === "tk") {
@@ -138,6 +145,12 @@ const getText = (
 		text = (
 			<span className="text-danger">
 				Goalie {event.name} comes back into the game
+			</span>
+		);
+	} else if (event.type === "goalieHook") {
+		text = (
+			<span className="text-danger">
+				Goalie change! {event.name} takes over in net
 			</span>
 		);
 	} else if (event.type === "shootoutStart") {
@@ -284,6 +297,12 @@ const processLiveGameEvents = ({
 			} else if (e.type === "penalty") {
 				const p = playersByPid[e.penaltyPID]!;
 				p.inPenaltyBox = true;
+			} else if (e.type === "fight") {
+				// Both fighters serve coincidental majors
+				for (const pid of e.pids) {
+					const p = playersByPid[pid]!;
+					p.inPenaltyBox = true;
+				}
 			} else if (e.type === "penaltyOver") {
 				const p = playersByPid[e.penaltyPID]!;
 				p.inPenaltyBox = false;

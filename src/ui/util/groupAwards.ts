@@ -53,12 +53,28 @@ const awardsOrder = [
 			"League Scrimmage Yards Leader",
 		],
 		hockey: [
-			"League Points Leader",
-			"League Goals Leader",
+			"Art Ross Trophy",
+			"Maurice Richard Trophy",
 			"League Assists Leader",
 		],
 	}),
 ];
+
+// Real NHL trophy names used by the hockey award config. They are added to the ordering list above
+// so they sort sensibly on a player's profile; other sports never emit these strings, so listing
+// them here is harmless.
+if (bySport({ hockey: true, default: false })) {
+	awardsOrder.splice(
+		2,
+		0,
+		"Hart Memorial Trophy",
+		"Conn Smythe Trophy",
+		"Norris Trophy",
+		"Selke Trophy",
+		"Vezina Trophy",
+		"Calder Memorial Trophy",
+	);
+}
 
 export const groupAwards = (awards: Player["awards"], shortNames?: boolean) => {
 	const getType = (originalType: string) => {
@@ -100,6 +116,22 @@ export const groupAwards = (awards: Player["awards"], shortNames?: boolean) => {
 			type = "OROY";
 		} else if (type === "Defensive Rookie of the Year") {
 			type = "DROY";
+		} else if (type === "Hart Memorial Trophy") {
+			type = "Hart";
+		} else if (type === "Conn Smythe Trophy") {
+			type = "Conn Smythe";
+		} else if (type === "Norris Trophy") {
+			type = "Norris";
+		} else if (type === "Selke Trophy") {
+			type = "Selke";
+		} else if (type === "Vezina Trophy") {
+			type = "Vezina";
+		} else if (type === "Calder Memorial Trophy") {
+			type = "Calder";
+		} else if (type === "Art Ross Trophy") {
+			type = "Art Ross";
+		} else if (type === "Maurice Richard Trophy") {
+			type = "Rocket";
 		} else if (type === "Slam Dunk Contest Winner") {
 			type = "Slam Dunk Contest";
 		} else if (type === "Three-Point Contest Winner") {

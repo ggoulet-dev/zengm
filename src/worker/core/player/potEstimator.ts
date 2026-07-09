@@ -178,28 +178,38 @@ if (!isSport("basketball")) {
 		},
 		hockey: {
 			C: {
-				intercept: 80.6422965,
-				age: -3.05006202,
-				ovr: 0.6486725,
-				interaction: 0.01448313,
+				// Hockey re-fit (2026) against the boosted skater development in
+				// developSeason.hockey.ts. The old coefficients predated that boost and
+				// capped projected pot near ~75, badly under-selling prospects who
+				// actually develop into 85-100+ ovr stars. These target the 75th-
+				// percentile realized career peak by (age, ovr) so the draft board - and
+				// the draft/trade AI that values prospects through pot - see the real
+				// ceiling.
+				intercept: 80.59609,
+				age: -2.725438,
+				ovr: 1.732334,
+				interaction: -0.03964382,
 			},
 			W: {
-				intercept: 68.0307412,
-				age: -2.55261434,
-				ovr: 0.88896865,
-				interaction: 0.00506265,
+				intercept: 87.754073,
+				age: -3.415105,
+				ovr: 1.084284,
+				interaction: -0.00523059,
 			},
 			D: {
-				intercept: 88.7269404,
-				age: -3.3507586,
-				ovr: 0.54694889,
-				interaction: 0.01839313,
+				intercept: 140.602718,
+				age: -5.637147,
+				ovr: 0.346395,
+				interaction: 0.02707895,
 			},
 			G: {
-				intercept: 102.9871616,
-				age: -3.82414489,
-				ovr: 0.57276983,
-				interaction: 0.01685319,
+				// Goalies keep the original glk - 10 ovr scale (only glk > 88 elites
+				// taper up in ovr.hockey.ts), so their projected pot stays under the
+				// G: 90 cap above except for generational prospects.
+				intercept: 100.441038,
+				age: -3.80278,
+				ovr: 1.144838,
+				interaction: -0.01199855,
 			},
 		},
 	});

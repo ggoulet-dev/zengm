@@ -23,7 +23,7 @@ const noGoalieDecorator = (
 };
 
 const posCoeffCenter = noGoalieDecorator((pos: string) =>
-	pos === "C" ? 2 : 0.5,
+	pos === "C" ? 2 : pos === "D" ? 1 : 0.5,
 );
 const posCoeffDefense = noGoalieDecorator((pos: string) =>
 	pos === "D" ? 2 : pos === "C" ? 1 : 0.5,
@@ -33,7 +33,7 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	stre: {
 		ageModifier: () => 0,
 		changeLimits: () => [-Infinity, Infinity],
-		posCoeff: (pos) => (pos === "D" ? 1 : 0.25),
+		posCoeff: (pos) => (pos === "D" ? 1.75 : 0.25),
 	},
 	spd: {
 		ageModifier: (age: number) => {
@@ -56,7 +56,7 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 			return -8;
 		},
 		changeLimits: () => [-12, 2],
-		posCoeff: () => 1,
+		posCoeff: (pos) => (pos === "D" ? 1.5 : 1),
 	},
 	endu: {
 		ageModifier: (age: number) => {
@@ -113,7 +113,7 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 		ageModifier: () => 0,
 		changeLimits: () => [-10, 10],
 		posCoeff: noGoalieDecorator((pos: string) =>
-			pos === "C" ? 2 : pos === "W" ? 1 : 0.5,
+			pos === "C" ? 2 : pos === "W" ? 1 : pos === "D" ? 1 : 0.5,
 		),
 	},
 	chk: {
@@ -143,7 +143,11 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	},
 };
 
-const calcBaseChange = (age: number, coachingLevel: number): number => {
+const calcBaseChange = (
+	age: number,
+	coachingLevel: number,
+	pos: string,
+): number => {
 	let val: number;
 
 	if (age <= 21) {
@@ -166,11 +170,27 @@ const calcBaseChange = (age: number, coachingLevel: number): number => {
 		val = -6;
 	}
 
-	// Noise
-	if (age <= 23) {
-		val += helpers.bound(realGauss(0, 5), -4, 20);
+	// Noise. Skaters get wide positive tails during the prospect window (age <= 25) so the draft can
+	// yield genuine stars and the occasional generational talent, while the floor still lets high
+	// picks bust. Goalies get their own positive-drift curve: generated goalies start with a low glk
+	// (~20-40), so without a development path drafted goalies plateau ~55-60 and never reach the NHL
+	// elite range (real starters are glk 76-93). Because the save formula was de-saturated (the sim
+	// reads raw glk, see GameSim.hockey), an eroding goalie pool would otherwise sink league
+	// goaltending and inflate scoring season after season. The goalie tail is narrower than the
+	// skaters' (one rating, amplified by posCoeff 2) and the OVR taper keeps elite glk from
+	// out-ovr-ing skaters on the depth chart.
+	if (pos === "G") {
+		if (age <= 23) {
+			val += helpers.bound(realGauss(2.5, 8), -4, 28);
+		} else if (age <= 25) {
+			val += helpers.bound(realGauss(1, 6), -4, 16);
+		} else {
+			val += helpers.bound(realGauss(0, 3), -2, 4);
+		}
+	} else if (age <= 23) {
+		val += helpers.bound(realGauss(0, 11), -5, 40);
 	} else if (age <= 25) {
-		val += helpers.bound(realGauss(0, 5), -4, 10);
+		val += helpers.bound(realGauss(0, 7), -5, 18);
 	} else {
 		val += helpers.bound(realGauss(0, 3), -2, 4);
 	}
@@ -198,7 +218,7 @@ const developSeason = (
 		}
 	}
 
-	const baseChange = calcBaseChange(age, coachingLevel);
+	const baseChange = calcBaseChange(age, coachingLevel, ratings.pos);
 
 	for (const key of helpers.keys(ratingsFormulas)) {
 		const posCoeff = ratingsFormulas[key].posCoeff(ratings.pos);

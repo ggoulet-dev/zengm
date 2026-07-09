@@ -5,6 +5,7 @@ import { g, helpers } from "../worker/util/index.ts";
 import {
 	defaultGameAttributes,
 	footballOverrides,
+	hockeyOverrides,
 } from "../common/defaultGameAttributes.ts";
 
 export const mockIDBLeague = (): any => {
@@ -104,6 +105,12 @@ export const resetCache = async (
 		}
 	}
 
+	if (data.draftPicks) {
+		for (const obj of data.draftPicks) {
+			await idb.cache.draftPicks.add(obj);
+		}
+	}
+
 	if (data.trade) {
 		for (const obj of data.trade) {
 			await idb.cache.trade.add(obj);
@@ -118,6 +125,8 @@ export const resetG = () => {
 
 	if (isSport("football")) {
 		Object.assign(g, footballOverrides);
+	} else if (isSport("hockey")) {
+		Object.assign(g, hockeyOverrides);
 	}
 
 	Object.assign(g, {

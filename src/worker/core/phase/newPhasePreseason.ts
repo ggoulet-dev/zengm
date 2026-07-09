@@ -24,6 +24,7 @@ import { applyRealTeamInfo } from "../../../common/applyRealTeamInfo.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { choice, randInt, uniform } from "../../../common/random.ts";
 import { env } from "../../util/env.ts";
+import { getRfaRightsTid } from "../freeAgents/rfa.hockey.ts";
 
 const newPhasePreseason = async (
 	conditions: Conditions,
@@ -48,6 +49,37 @@ const newPhasePreseason = async (
 
 	const teams = await idb.cache.teams.getAll();
 	const teamsByTid = groupByUnique(teams, "tid");
+
+	// Hockey RFA: a tendered RFA still unsigned entering the season keeps his rights only if the rights team still exists and can fit his asking price - otherwise renounce, so he isn't locked out of the league with nobody able to sign him
+	{
+		const freeAgentPlayers = await idb.cache.players.indexGetAll(
+			"playersByTid",
+			PLAYER.FREE_AGENT,
+		);
+		for (const p of freeAgentPlayers) {
+			if (p.rfaTid === undefined) {
+				continue;
+			}
+
+			const rightsTid = getRfaRightsTid(p);
+			let keepRights = rightsTid !== undefined;
+
+			if (keepRights) {
+				const t = teamsByTid[rightsTid!];
+				if (!t || t.disabled) {
+					keepRights = false;
+				} else if (g.get("salaryCapType") !== "none") {
+					const payroll = await team.getPayroll(rightsTid!);
+					keepRights = payroll + p.contract.amount <= g.get("salaryCap");
+				}
+			}
+
+			if (!keepRights) {
+				delete p.rfaTid;
+				await idb.cache.players.put(p);
+			}
+		}
+	}
 
 	const realTeamInfo = (await idb.meta.get("attributes", "realTeamInfo")) as
 		| RealTeamInfo

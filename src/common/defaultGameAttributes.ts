@@ -132,6 +132,8 @@ const gameAttributesKeysSportSpecific = {
 		"overtimeLength",
 		"overtimeLengthPlayoffs",
 		"hitFactor",
+		"fightFactor",
+		"rfa",
 		"giveawayFactor",
 		"takeawayFactor",
 		"blockFactor",
@@ -231,6 +233,7 @@ export const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 	foulsUntilBonus: [5, 4, 2],
 	rookieContractLengths: [3, 2],
 	rookiesCanRefuse: true,
+	rfa: false,
 
 	pace: 100,
 	threePointers: true,
@@ -353,6 +356,7 @@ export const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 
 	// These are only for ZGMH, but for TypeScript define them here
 	hitFactor: 1,
+	fightFactor: 1,
 	giveawayFactor: 1,
 	takeawayFactor: 1,
 	deflectionFactor: 1,
@@ -480,6 +484,7 @@ export const hockeyOverrides: Partial<GameAttributesLeagueWithHistory> =
 				pace: 1,
 				maxOvertimes: wrapFromStart(1),
 				shootoutRounds: wrapFromStart(3),
+				rfa: true,
 			}
 		: {};
 

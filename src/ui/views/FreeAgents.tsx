@@ -112,6 +112,7 @@ const FreeAgents = ({
 	numRosterSpots,
 	payroll,
 	players,
+	rfa,
 	season,
 	stats,
 	type,
@@ -179,6 +180,8 @@ const FreeAgents = ({
 		askingForText,
 		"Exp",
 		"Actions",
+		...(rfa ? ["RFA"] : []),
+		"Negotiate",
 	];
 	const cols = getCols(colKeys, {
 		Actions: {
@@ -274,6 +277,26 @@ const FreeAgents = ({
 					: undefined,
 				wrappedContractAmount(p, p.contract.amount),
 				wrappedContractExp(p),
+				...(rfa
+					? [
+							p.rfaAbbrev !== undefined
+								? {
+										value: (
+											<a
+												href={helpers.leagueUrl([
+													"roster",
+													`${p.rfaAbbrev}_${p.rfaTid}`,
+												])}
+												title="Restricted free agent - this team can match any offer sheet or take draft pick compensation"
+											>
+												{p.rfaAbbrev}
+											</a>
+										),
+										searchValue: p.rfaAbbrev,
+									}
+								: null,
+						]
+					: []),
 				p.freeAgentType === "available"
 					? {
 							value: (
@@ -351,7 +374,7 @@ const FreeAgents = ({
 
 			<DataTable
 				cols={cols}
-				defaultSort={[cols.length - 3, "desc"]}
+				defaultSort={[colKeys.indexOf(askingForText), "desc"]}
 				defaultStickyCols={window.mobile ? 0 : 1}
 				name="FreeAgents"
 				pagination

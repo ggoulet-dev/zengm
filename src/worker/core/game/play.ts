@@ -206,6 +206,8 @@ const play = async (
 				// Is it already over?
 				if (p.injury.type !== "Healthy" && p.injury.gamesRemaining <= 0) {
 					const score = p.injury.score;
+					const wasSuspension =
+						isSport("hockey") && p.injury.type === "Suspension";
 					p.injury = {
 						type: "Healthy",
 						gamesRemaining: 0,
@@ -227,10 +229,15 @@ const play = async (
 					logEvent(
 						{
 							type: "healed",
-							text: `${healedText} has recovered from ${helpers.pronoun(
-								g.get("gender"),
-								"his",
-							)} injury.`,
+							text: wasSuspension
+								? `${healedText} has returned from ${helpers.pronoun(
+										g.get("gender"),
+										"his",
+									)} suspension.`
+								: `${healedText} has recovered from ${helpers.pronoun(
+										g.get("gender"),
+										"his",
+									)} injury.`,
 							showNotification: false,
 							pids: [p.pid],
 							tids: [p.tid],

@@ -6,6 +6,7 @@ import {
 	useMemo,
 } from "react";
 import { ResponsiveTableWrapper } from "./ResponsiveTableWrapper.tsx";
+import { SafeHtml } from "../components/SafeHtml.tsx";
 import { helpers } from "../util/helpers.ts";
 import { getCols } from "../../common/getCols.ts";
 import type { PlayByPlayEventScore } from "../../worker/core/GameSim.hockey/PlayByPlayLogger.ts";
@@ -34,6 +35,8 @@ type BoxScore = {
 	teams: [Team, Team];
 	numPeriods?: number;
 	exhibition?: boolean;
+	clutchPlays?: string[];
+	gameOver?: boolean;
 };
 
 const StatsTable = ({
@@ -328,6 +331,79 @@ const ScoringSummary = ({
 	);
 };
 
+// NHL "three stars of the game": the top performers across both teams. Skaters are scored by
+// goals/assists/shots; goalies by saves, shutouts, and goals against (a shutout is worth roughly a
+// hat trick, so a hot goalie can take the first star, just like in the real NHL).
+type Star = { pid: number; name: string; abbrev: string; statText: string };
+
+const getThreeStars = (teams: [Team, Team]): Star[] => {
+	const candidates: (Star & { score: number })[] = [];
+
+	for (const t of teams) {
+		for (const p of t.players) {
+			const s = processPlayerStats(p, ["g", "a", "s", "sv", "ga", "so"]);
+
+			if (p.gpGoalie > 0) {
+				const score = 0.05 * s.sv + 3 * s.so - 0.55 * s.ga + 0.8;
+				const statText = s.so > 0 ? `${s.sv} SV, SO` : `${s.sv} SV, ${s.ga} GA`;
+				candidates.push({
+					pid: p.pid,
+					name: p.name,
+					abbrev: t.abbrev,
+					statText,
+					score,
+				});
+			} else if (p.gpSkater > 0 && (s.g > 0 || s.a > 0 || s.s > 0)) {
+				const score = 1.4 * s.g + 0.9 * s.a + 0.01 * s.s;
+				const parts = [];
+				if (s.g > 0) {
+					parts.push(`${s.g} G`);
+				}
+				if (s.a > 0) {
+					parts.push(`${s.a} A`);
+				}
+				if (parts.length === 0) {
+					parts.push(`${s.s} SOG`);
+				}
+				candidates.push({
+					pid: p.pid,
+					name: p.name,
+					abbrev: t.abbrev,
+					statText: parts.join(", "),
+					score,
+				});
+			}
+		}
+	}
+
+	return candidates.sort((a, b) => b.score - a.score).slice(0, 3);
+};
+
+const ThreeStars = ({ teams }: { teams: [Team, Team] }) => {
+	const stars = getThreeStars(teams);
+	if (stars.length < 3) {
+		return null;
+	}
+
+	return (
+		<div className="mb-3">
+			<h2>Three Stars of the Game</h2>
+			<ol className="list-unstyled mb-0">
+				{stars.map((star, i) => (
+					<li key={star.pid} className="mb-1">
+						<span className="text-warning" title={`${i + 1}. Star`}>
+							{"★".repeat(3 - i)}
+						</span>{" "}
+						<span className="fw-bold">{star.name}</span>{" "}
+						<span className="text-body-secondary">({star.abbrev})</span>{" "}
+						{star.statText}
+					</li>
+				))}
+			</ol>
+		</div>
+	);
+};
+
 const BoxScore = ({
 	boxScore,
 	forceRowUpdate,
@@ -344,6 +420,10 @@ const BoxScore = ({
 
 	return (
 		<div className="mb-3">
+			{boxScore.gameOver !== false ? (
+				<ThreeStars teams={boxScore.teams} />
+			) : null}
+
 			<h2>Scoring Summary</h2>
 			<ScoringSummary
 				key={boxScore.gid}
@@ -383,6 +463,15 @@ const BoxScore = ({
 					</div>
 				);
 			})}
+			{boxScore.gameOver !== false &&
+			boxScore.clutchPlays &&
+			boxScore.clutchPlays.length > 0
+				? boxScore.clutchPlays.map((text, i) => (
+						<p key={i}>
+							<SafeHtml dirty={text} />
+						</p>
+					))
+				: null}
 		</div>
 	);
 };

@@ -146,14 +146,6 @@ export const penalties: {
 		probPerPossession: 0,
 		cumsumProbPerPossession: 0,
 	},
-	// Disabled for now, cause this would generally apply to 2 people
-	/*{
-		name: "fighting",
-		type: "major",
-		numPerSeason: 449,
-		probPerPossession: 0,
-		cumsumProbPerPossession: 0,
-	},*/
 	{
 		name: "high-sticking",
 		type: "doubleMinor",
@@ -289,3 +281,12 @@ for (const penalty of penalties) {
 	cumsumProbPerPossession += penalty.probPerPossession;
 	penalty.cumsumProbPerPossession = cumsumProbPerPossession;
 }
+
+// Fighting is a coincidental major involving 2 players, so it's not part of the random penalty draw above - GameSim triggers it explicitly after hits (see doHit). numPerSeason 449 (real data, 1230-game season) is the rate the fight probability in GameSim is tuned against.
+export const fightPenalty: (typeof penalties)[number] = {
+	name: "fighting",
+	type: "major",
+	numPerSeason: 449,
+	probPerPossession: 0,
+	cumsumProbPerPossession: 0,
+};

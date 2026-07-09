@@ -475,6 +475,7 @@ export const EXHIBITION_GAME_SETTINGS = [
 	"fourthDownFactor",
 	"onsideFactor",
 	"onsideRecoveryFactor",
+	"fightFactor",
 	"giveawayFactor",
 	"takeawayFactor",
 	"blockFactor",

@@ -28,6 +28,22 @@ const sortFunction =
 		return diff;
 	};
 
+// Position-specific ovrs overlap enough that an elite player can rank first at every position,
+// so without this an elite defenseman whose C ovr beats every natural center's C ovr (plus the
+// +15 natural position bonus) would be selected as a starting center.
+const NATURAL_POSITIONS = {
+	C: ["C", "W"],
+	W: ["C", "W"],
+	D: ["D"],
+	G: ["G"],
+};
+
+const NUM_STARTERS = {
+	F: NUM_LINES.F * NUM_PLAYERS_PER_LINE.F,
+	D: NUM_LINES.D * NUM_PLAYERS_PER_LINE.D,
+	G: NUM_LINES.G * NUM_PLAYERS_PER_LINE.G,
+};
+
 const getPlayersInLines = <
 	T extends {
 		ratings: {
@@ -63,20 +79,28 @@ const getPlayersInLines = <
 
 	const maxLength = Math.max(...Object.values(info).map((x) => x.minLength));
 
-	// Set starters (in lines)
+	// Set starters (in lines). The first pass only considers players at their natural position
+	// group, so a defenseman is never picked at center while natural forwards remain. The second
+	// pass fills any slots still open (roster short at some position) with the best remaining
+	// players, regardless of position.
 	const playersUsed = new Set<(typeof players)[number]>();
-	for (let i = 0; i < maxLength; i++) {
-		for (const pos of ["G", "C", "D", "W"] as const) {
-			const { selected, minLength, sorted } = info[pos];
-			if (selected.length >= minLength) {
-				continue;
-			}
+	for (const naturalOnly of [true, false]) {
+		for (let i = 0; i < maxLength; i++) {
+			for (const pos of ["G", "C", "D", "W"] as const) {
+				const { selected, minLength, sorted } = info[pos];
+				if (selected.length >= minLength) {
+					continue;
+				}
 
-			for (const p of sorted) {
-				if (!playersUsed.has(p)) {
-					selected.push(p);
-					playersUsed.add(p);
-					break;
+				for (const p of sorted) {
+					if (
+						!playersUsed.has(p) &&
+						(!naturalOnly || NATURAL_POSITIONS[pos].includes(p.ratings.pos))
+					) {
+						selected.push(p);
+						playersUsed.add(p);
+						break;
+					}
 				}
 			}
 		}
@@ -143,11 +167,12 @@ const genDepth = async (
 				const addToDepth = (
 					depthPos: "G" | "D" | "F",
 					scorePos: "G" | "D" | "C",
+					startIndex: number,
 				) => {
 					const pScore = score(p, scorePos);
 					let added = false;
 
-					for (let i = 0; i < depth[pos2].length; i++) {
+					for (let i = startIndex; i < depth[pos2].length; i++) {
 						const p2 = players.find((p3) => p3.pid === depth[depthPos][i]);
 
 						if (!p2 || pScore > score(p2, scorePos)) {
@@ -163,8 +188,19 @@ const genDepth = async (
 					}
 				};
 
+				// Out-of-position players (like a defenseman in the forwards list) can only be
+				// inserted below the starters
+				const naturalGroup =
+					p.ratings.pos === "G" || p.ratings.pos === "D" ? p.ratings.pos : "F";
+
 				if (pos2 === "G" || pos2 === "D") {
-					addToDepth(pos2, pos2);
+					addToDepth(
+						pos2,
+						pos2,
+						naturalGroup === pos2 ? 0 : NUM_STARTERS[pos2],
+					);
+				} else if (naturalGroup !== "F") {
+					addToDepth("F", "C", NUM_STARTERS.F);
 				} else {
 					const startingC = [depth.F[0], depth.F[3], depth.F[6], depth.F[9]];
 					const startingW = [
@@ -233,7 +269,7 @@ const genDepth = async (
 						depth.F.push(...oldDepth.filter((pid) => !depth.F.includes(pid)));
 					} else {
 						// Add somewhere to the end, based on scoreC
-						addToDepth("F", "C");
+						addToDepth("F", "C", 0);
 					}
 
 					// Just in case...

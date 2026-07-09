@@ -57,8 +57,11 @@ export const COMPOSITE_WEIGHTS: CompositeWeights<RatingKey> = {
 		weights: [1, 1, 0.5, 1, 1, 0.25, 0.1],
 	},
 	penalties: {
-		ratings: [50, "chk", "diq"],
-		weights: [1, 1, -0.5],
+		// Who takes a penalty. Lower flat baseline + heavier checking, with both defensive
+		// IQ (discipline) and offensive IQ (skilled players draw penalties more than they
+		// take them) reducing it, so enforcers take far more than disciplined stars.
+		ratings: [40, "chk", "diq", "oiq"],
+		weights: [1, 1.2, -0.4, -0.4],
 	},
 	endurance: {
 		ratings: [50, "endu"],
@@ -323,12 +326,12 @@ export const SIMPLE_AWARDS = [
 ] as const;
 
 export const AWARD_NAMES = {
-	mvp: "Most Valuable Player",
-	roy: "Rookie of the Year",
-	dpoy: "Defensive Player of the Year",
-	dfoy: "Defensive Forward of the Year",
-	goy: "Goalie of the Year",
-	finalsMvp: "Playoffs MVP",
+	mvp: "Hart Memorial Trophy",
+	roy: "Calder Memorial Trophy",
+	dpoy: "Norris Trophy",
+	dfoy: "Selke Trophy",
+	goy: "Vezina Trophy",
+	finalsMvp: "Conn Smythe Trophy",
 	allLeague: "All-League",
 	allRookie: "All-Rookie Team",
 } as const;

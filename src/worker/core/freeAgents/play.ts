@@ -2,6 +2,7 @@ import { PHASE } from "../../../common/constants.ts";
 import { league, phase, trade } from "../index.ts";
 import autoSign from "./autoSign.ts";
 import decreaseDemands from "./decreaseDemands.ts";
+import { runAiOfferSheets } from "./offerSheet.hockey.ts";
 import {
 	g,
 	lock,
@@ -42,6 +43,7 @@ async function play(
 		const cbYetAnother = async () => {
 			await decreaseDemands();
 			await autoSign();
+			await runAiOfferSheets(conditions);
 			await league.setGameAttributes({
 				daysLeft: g.get("daysLeft") - 1,
 			});

@@ -27,6 +27,8 @@ import { bySport, isSport } from "../../../common/sportFunctions.ts";
 export const descriptions = {
 	difficulty:
 		"Increasing difficulty makes AI teams more reluctant to trade with you, makes players less likely to sign with you, and makes it harder to turn a profit.",
+	spectator:
+		"In spectator mode, the AI controls all teams and you get to watch the league evolve. This is similar to Tools > Auto Play, but it lets you play through the season at your own pace.",
 };
 
 type GodModeRequired = "always" | "existingLeagueOnly" | undefined;
@@ -1284,6 +1286,25 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Contracts",
+			key: "rfa",
+			name: "Restricted Free Agency (RFA)",
+			godModeRequired: "existingLeagueOnly",
+			descriptionLong: (
+				<>
+					NHL-style restricted free agency. Players under 27 years old with
+					fewer than 7 accrued seasons remain their team's property when their
+					contracts expire: the team tenders a qualifying offer to retain
+					exclusive negotiating rights, and the player cannot refuse to
+					negotiate. Other teams can only sign a tendered RFA with an offer
+					sheet, which the original team can match within the signing period —
+					otherwise it receives draft pick compensation based on the contract
+					size. Non-tendered players become unrestricted free agents.
+				</>
+			),
+			type: "bool",
+		},
+		{
+			category: "Contracts",
 			key: "playerMoodTraits",
 			name: "Player Mood Traits",
 			godModeRequired: "existingLeagueOnly",
@@ -1385,8 +1406,7 @@ export const settings: Setting[] = (
 			key: "spectator",
 			name: "Spectator Mode",
 			type: "bool",
-			description:
-				"In spectator mode, the AI controls all teams and you get to watch the league evolve. This is similar to Tools > Auto Play, but it lets you play through the season at your own pace.",
+			description: descriptions.spectator,
 		},
 		{
 			category: "Schedule",
@@ -2088,6 +2108,15 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Tendencies",
+			key: "fightFactor",
+			name: "Fight Factor",
+			godModeRequired: "always",
+			type: "float",
+			description:
+				"The probability of a fight breaking out after a hit is multiplied by this number. Set to 0 to disable fighting.",
+		},
+		{
+			category: "Tendencies",
 			key: "giveawayFactor",
 			name: "Giveaway Factor",
 			godModeRequired: "always",
@@ -2616,12 +2645,12 @@ export const settings: Setting[] = (
 						title: "Games with statistical feats",
 					},
 
-					// Only basketball has clutchPlays currently, so no point showing this option for others
+					// Only basketball and hockey have clutchPlays currently, so no point showing this option for others
 					...(bySport({
 						baseball: false,
 						basketball: true,
 						football: false,
-						hockey: false,
+						hockey: true,
 					})
 						? [
 								{
