@@ -3,7 +3,7 @@ import { g, helpers } from "../util/index.ts";
 import type { UpdateEvents, Player, ViewInput } from "../../common/types.ts";
 import { orderBy, type OrderBySortParams } from "../../common/utils.ts";
 import { player } from "../core/index.ts";
-import { PLAYER } from "../../common/constants.ts";
+import { AWARD_NAMES, PLAYER } from "../../common/constants.ts";
 import { getValueStatsRow } from "../core/player/checkJerseyNumberRetirement.ts";
 import goatFormula from "../util/goatFormula.ts";
 import addFirstNameShort from "../util/addFirstNameShort.ts";
@@ -390,8 +390,7 @@ const updatePlayers = async (
 			title = "Best Players Without an MVP";
 			description = "These are the best players who never won an MVP award.";
 
-			filter = (p) =>
-				p.awards.every((award) => award.type !== "Most Valuable Player");
+			filter = (p) => p.awards.every((award) => award.type !== AWARD_NAMES.mvp);
 			getValue = playerValue;
 		} else if (type === "progs") {
 			title = "Best Progs";
@@ -842,12 +841,11 @@ const updatePlayers = async (
 			];
 
 			filter = (p) =>
-				p.awards.length > 0 &&
-				p.awards.some((a) => a.type === "Most Valuable Player");
+				p.awards.length > 0 && p.awards.some((a) => a.type === AWARD_NAMES.mvp);
 
 			getValue = (p) => {
 				const mvpSeasons = p.awards.filter(
-					(award) => award.type === "Most Valuable Player",
+					(award) => award.type === AWARD_NAMES.mvp,
 				);
 				const entries = [];
 				for (const mvp of mvpSeasons) {

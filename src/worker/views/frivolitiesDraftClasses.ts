@@ -1,7 +1,7 @@
 import { idb } from "../db/index.ts";
 import { g } from "../util/index.ts";
 import type { UpdateEvents, Player } from "../../common/types.ts";
-import { PHASE } from "../../common/constants.ts";
+import { AWARD_NAMES, PHASE } from "../../common/constants.ts";
 import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { orderBy } from "../../common/utils.ts";
 import { extraStats } from "./hallOfFame.ts";
@@ -86,7 +86,7 @@ const updateFrivolitiesDraftClasses = async (
 			if (p.hof) {
 				draftClass.numHOF += 1;
 			}
-			if (p.awards.some((award) => award.type === "Most Valuable Player")) {
+			if (p.awards.some((award) => award.type === AWARD_NAMES.mvp)) {
 				draftClass.numMVP += 1;
 			}
 			if (p.awards.some((award) => award.type === "All-Star")) {

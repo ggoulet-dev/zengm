@@ -1,4 +1,4 @@
-import { PLAYER } from "../../common/constants.ts";
+import { AWARD_NAMES, PLAYER } from "../../common/constants.ts";
 import { idb } from "../db/index.ts";
 import { g } from "../util/index.ts";
 import type { ViewInput } from "../../common/types.ts";
@@ -119,12 +119,14 @@ const updateDraftHistory = async (inputs: ViewInput<"draftHistory">) => {
 				awardCounts: {
 					allStar: p.awards.filter((award: any) => award.type === "All-Star")
 						.length,
-					mvp: p.awards.filter(
-						(award: any) => award.type === "Most Valuable Player",
-					).length,
+					mvp: p.awards.filter((award: any) => award.type === AWARD_NAMES.mvp)
+						.length,
 					roy: p.awards.filter((award: any) => {
 						// "includes" to handle OROY and DROY in FBGM
-						return award.type.includes("Rookie of the Year");
+						return (
+							award.type === AWARD_NAMES.roy ||
+							award.type.includes("Rookie of the Year")
+						);
 					}).length,
 					champ: p.awards.filter(
 						(award: any) => award.type === "Won Championship",

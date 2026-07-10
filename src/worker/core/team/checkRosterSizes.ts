@@ -9,7 +9,7 @@ import {
 	KEY_POSITIONS_NEEDED,
 } from "../freeAgents/getBest.ts";
 import { getRfaRightsTid } from "../freeAgents/rfa.hockey.ts";
-import { bySport } from "../../../common/sportFunctions.ts";
+import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { last, orderBy } from "../../../common/utils.ts";
 
 export const dropPlayers = async (players: Player[], numToDrop: number) => {
@@ -200,6 +200,7 @@ const checkRosterSizes = async (
 				}
 			}
 		} else if (
+			isSport("hockey") &&
 			!userTeamAndActive &&
 			Object.keys(POSITION_COUNTS).length > 0 &&
 			numPlayersOnRoster > getAiRosterTarget() + 3

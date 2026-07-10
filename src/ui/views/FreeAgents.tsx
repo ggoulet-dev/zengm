@@ -179,6 +179,7 @@ const FreeAgents = ({
 		"Mood",
 		askingForText,
 		"Exp",
+		...(rfa ? ["RFA"] : []),
 		"Actions",
 		...(rfa ? ["RFA"] : []),
 		"Negotiate",

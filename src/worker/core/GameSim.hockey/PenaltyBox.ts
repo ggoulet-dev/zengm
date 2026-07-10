@@ -150,21 +150,26 @@ class PenaltyBox {
 	}
 
 	checkIfPenaltiesOver() {
+		const expired: [TeamNum, PenaltyBoxEntry][] = [];
 		for (const t of [0, 1] as const) {
 			this.players[t] = this.players[t].filter((entry) => {
 				if (entry.minutesLeft > 0) {
 					return true;
 				}
 
-				this.onPenaltyOver({
-					t,
-					p: entry.p,
-					minutesAgo: -entry.minutesLeft,
-					ppo: entry.ppo,
-					coincidental: entry.coincidental,
-				});
-
+				expired.push([t, entry]);
 				return false;
+			});
+		}
+
+		// onPenaltyOver must run only after both boxes are updated - it reads count(), which drives on-ice strength (and, at 3-on-3, both teams' skater counts)
+		for (const [t, entry] of expired) {
+			this.onPenaltyOver({
+				t,
+				p: entry.p,
+				minutesAgo: -entry.minutesLeft,
+				ppo: entry.ppo,
+				coincidental: entry.coincidental,
 			});
 		}
 	}

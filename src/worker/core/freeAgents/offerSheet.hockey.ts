@@ -156,26 +156,26 @@ const decideMatchAi = async (
 ) => {
 	const vcc = new ValueChangeCalculator();
 
-	// Matching means paying the offer sheet terms, not the player's discounted asking price. p is the live cache object, so evaluate() sees this temporary contract.
-	const actualContract = p.contract;
-	p.contract = {
-		...actualContract,
-		amount: contract.amount,
-		exp: contract.exp,
-	};
-	let dvKeep;
-	try {
-		dvKeep = await vcc.evaluate({
-			tid: rightsTid,
-			pidsAdd: [p.pid],
-			pidsRemove: [],
-			dpidsAdd: [],
-			dpidsRemove: [],
-			tradingPartnerTid: undefined,
-		});
-	} finally {
-		p.contract = actualContract;
-	}
+	// Matching means paying the offer sheet terms, not the player's discounted
+	// asking price. Pass the hypothetical contract as an override rather than
+	// mutating the live cache object, since evaluate() awaits further idb reads
+	// while this runs and p is the same object reference held in idb.cache.players.
+	const dvKeep = await vcc.evaluate({
+		tid: rightsTid,
+		pidsAdd: [p.pid],
+		pidsRemove: [],
+		dpidsAdd: [],
+		dpidsRemove: [],
+		tradingPartnerTid: undefined,
+		contractOverride: {
+			pid: p.pid,
+			contract: {
+				...p.contract,
+				amount: contract.amount,
+				exp: contract.exp,
+			},
+		},
+	});
 
 	const dvPicks = await vcc.evaluate({
 		tid: rightsTid,

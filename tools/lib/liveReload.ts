@@ -29,18 +29,18 @@ const CLIENT_SCRIPT = `(function () {
 
 			// Swap in the new stylesheet, then drop the old one once the new
 			// one has loaded, to avoid a flash of unstyled content.
-			(function (oldLink) {
-				fresh.addEventListener("load", function () {
+			(function (oldLink, newLink) {
+				newLink.addEventListener("load", function () {
 					if (oldLink.parentNode) {
 						oldLink.parentNode.removeChild(oldLink);
 					}
 				});
-			})(link);
-			fresh.addEventListener("error", function () {
-				if (fresh.parentNode) {
-					fresh.parentNode.removeChild(fresh);
-				}
-			});
+				newLink.addEventListener("error", function () {
+					if (newLink.parentNode) {
+						newLink.parentNode.removeChild(newLink);
+					}
+				});
+			})(link, fresh);
 			link.parentNode.insertBefore(fresh, link.nextSibling);
 
 			if (window.themeCSSLink === link) {

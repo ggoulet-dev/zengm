@@ -418,17 +418,6 @@ const normalizeContractDemands = async ({
 
 		let amount = info.contractAmount;
 
-		// Hockey: cap the auctioned demand at a value-based ceiling (see
-		// HOCKEY_DEMAND_CEILING_FACTOR) so a cap-rich league can't inflate
-		// mid-tier players up to the max contract.
-		if (isSport("hockey")) {
-			amount = Math.min(
-				amount,
-				player.genContract(p, false, true).amount *
-					HOCKEY_DEMAND_CEILING_FACTOR,
-			);
-		}
-
 		// HACK - assume within first 3 years it is a rookie contract. Only need to check players with draftPickAutoContract disabled, because otherwise there is other code handling rookie contracts.
 		let labelAsRookieContract = rookieSalaries && p.draft.year === season;
 		if (
@@ -455,6 +444,17 @@ const normalizeContractDemands = async ({
 		// Hockey RFA: a tendered RFA keeps asking bridge-deal money, not the open-market auction price - only his rights team can sign him anyway
 		if (getRfaRightsTid(p) !== undefined) {
 			amount *= RFA_DEMAND_FACTOR;
+		}
+
+		// Hockey: cap the auctioned demand at a value-based ceiling (see
+		// HOCKEY_DEMAND_CEILING_FACTOR) so a cap-rich league can't inflate
+		// mid-tier players up to the max contract.
+		if (isSport("hockey")) {
+			amount = Math.min(
+				amount,
+				player.genContract(p, false, true).amount *
+					HOCKEY_DEMAND_CEILING_FACTOR,
+			);
 		}
 
 		amount = helpers.bound(

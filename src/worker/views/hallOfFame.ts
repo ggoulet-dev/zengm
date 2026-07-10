@@ -1,4 +1,4 @@
-import { PHASE } from "../../common/constants.ts";
+import { AWARD_NAMES, PHASE } from "../../common/constants.ts";
 import { idb } from "../db/index.ts";
 import { g } from "../util/index.ts";
 import type { UpdateEvents } from "../../common/types.ts";
@@ -61,7 +61,7 @@ const updatePlayers = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			p.countMvp = 0;
 			p.countTitles = 0;
 			for (const award of p.awards) {
-				if (award.type === "Most Valuable Player") {
+				if (award.type === AWARD_NAMES.mvp) {
 					p.countMvp += 1;
 				} else if (award.type === "Won Championship") {
 					p.countTitles += 1;

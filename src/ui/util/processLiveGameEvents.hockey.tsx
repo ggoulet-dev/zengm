@@ -65,7 +65,8 @@ const getText = (
 		text = (
 			<span className="text-danger">
 				Fight! {event.names[0]} and {event.names[1]} drop the gloves, and{" "}
-				{event.names[0]} gets the better of it. Five minutes each for fighting
+				{event.names[0]} gets the better of it. {event.minutes} minutes each for
+				fighting
 			</span>
 		);
 	} else if (event.type === "gv") {

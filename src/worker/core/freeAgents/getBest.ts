@@ -6,7 +6,7 @@ import {
 } from "../../../common/constants.ts";
 import { getTeamOvrDiffs } from "../draft/runPicks.ts";
 import { last, orderBy } from "../../../common/utils.ts";
-import { bySport } from "../../../common/sportFunctions.ts";
+import { bySport, isSport } from "../../../common/sportFunctions.ts";
 
 // In some sports, extra check for certain important rare positions in case the only one was traded away. These should only be positions with weird unique skills, where you can't replace them easily with another position. Value is the number of players that should be at each position.
 export const KEY_POSITIONS_NEEDED = bySport<Record<string, number> | undefined>(
@@ -44,6 +44,7 @@ const getBest = <T extends PlayerWithoutKey>(
 	playersAvailable: T[],
 	payroll?: number,
 ): T | void => {
+	const maxRosterSize = g.get("maxRosterSize");
 	const minContract = g.get("minContract");
 	const salaryCap = g.get("salaryCap");
 	const salaryCapType = g.get("salaryCapType");
@@ -157,11 +158,13 @@ const getBest = <T extends PlayerWithoutKey>(
 		const shouldAddPlayerNormal =
 			salaryCapCheck &&
 			p.contract.amount > minContract &&
-			playersOnRoster.length < aiRosterTarget + 3;
-		const shouldAddPlayerMinContract =
-			p.contract.amount <= minContract &&
-			playersOnRoster.length < aiRosterTarget &&
-			!positionFull;
+			(!isSport("hockey") || playersOnRoster.length < aiRosterTarget + 3);
+		const shouldAddPlayerMinContract = isSport("hockey")
+			? p.contract.amount <= minContract &&
+				playersOnRoster.length < aiRosterTarget &&
+				!positionFull
+			: p.contract.amount <= minContract &&
+				playersOnRoster.length < maxRosterSize - 2;
 
 		// If none of the other checks were true and we can afford this player and it's at a position we have nobody at (like hockey goalie), go for it
 		const shouldAddPlayerPosition =

@@ -68,6 +68,9 @@ type PlayByPlayEventInput =
 			t: TeamNum;
 			names: [string, string];
 			pids: [number, number];
+
+			// Length of the coincidental majors, from penaltyTypes
+			minutes: number;
 	  }
 	| {
 			type:
@@ -174,7 +177,9 @@ class HockeyPlayByPlayLogger extends PlayByPlayLoggerBase<PlayByPlayEventOutput>
 			...event,
 		};
 
-		this.playByPlay.push(event2);
+		if (this.active) {
+			this.playByPlay.push(event2);
+		}
 
 		const scoringSummaryEvent = formatScoringSummaryEvent(event2);
 		if (scoringSummaryEvent) {

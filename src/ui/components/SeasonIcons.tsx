@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { AWARD_NAMES } from "../../common/constants.ts";
 import type { Player } from "../../common/types.ts";
 
 const prefixCount = (text: string, count: number) => {
@@ -38,7 +39,7 @@ export const SeasonIcons = ({
 				}
 			}
 		} else {
-			if (award.type === "Most Valuable Player") {
+			if (award.type === AWARD_NAMES.mvp) {
 				countMVP += 1;
 				if (season !== undefined) {
 					break;
@@ -62,7 +63,7 @@ export const SeasonIcons = ({
 			}
 		} else {
 			if (countMVP > 0) {
-				title = "Most Valuable Player";
+				title = AWARD_NAMES.mvp!;
 				classNameIcon = "glyphicon glyphicon-star text-yellow";
 			} else if (countAllStar > 0) {
 				title = "All-Star";
@@ -78,7 +79,7 @@ export const SeasonIcons = ({
 		} else {
 			const titles = [];
 			if (countMVP > 0) {
-				titles.push(prefixCount("Most Valuable Player", countMVP));
+				titles.push(prefixCount(AWARD_NAMES.mvp!, countMVP));
 			}
 			if (countAllStar > 0) {
 				titles.push(prefixCount("All-Star", countAllStar));

@@ -241,35 +241,40 @@ test(
 		const origRandom = Math.random;
 		Math.random = mulberry32(424242);
 
-		for (let i = 0; i < numGames; i++) {
-			const game = makeGameSim(await loadGameTeams(), i);
-			const starters = [game.playersOnIce[0].G[0]!, game.playersOnIce[1].G[0]!];
-			const backups = [game.backupGoalies[0], game.backupGoalies[1]];
+		try {
+			for (let i = 0; i < numGames; i++) {
+				const game = makeGameSim(await loadGameTeams(), i);
+				const starters = [
+					game.playersOnIce[0].G[0]!,
+					game.playersOnIce[1].G[0]!,
+				];
+				const backups = [game.backupGoalies[0], game.backupGoalies[1]];
 
-			game.run();
+				game.run();
 
-			for (const t of [0, 1] as const) {
-				if (game.hookedGoalie[t]) {
-					hooks += 1;
+				for (const t of [0, 1] as const) {
+					if (game.hookedGoalie[t]) {
+						hooks += 1;
 
-					const backup = backups[t]!;
-					assert.strictEqual(game.lines[t].G[0]![0], backup);
-					assert.strictEqual(backup.stat.gpGoalie, 1);
-					assert.isAbove(backup.stat.gMin, 0);
+						const backup = backups[t]!;
+						assert.strictEqual(game.lines[t].G[0]![0], backup);
+						assert.strictEqual(backup.stat.gpGoalie, 1);
+						assert.isAbove(backup.stat.gMin, 0);
 
-					// The relieved starter never came back (G can be empty if the game ended with the goalie pulled)
-					assert.notStrictEqual(game.playersOnIce[t].G[0], starters[t]);
+						// The relieved starter never came back (G can be empty if the game ended with the goalie pulled)
+						assert.notStrictEqual(game.playersOnIce[t].G[0], starters[t]);
 
-					// Both goalies played, so the starter cannot have a full-game stat line
-					assert.isBelow(
-						starters[t]!.stat.gMin,
-						g.get("quarterLength") * g.get("numPeriods"),
-					);
+						// Both goalies played, so the starter cannot have a full-game stat line
+						assert.isBelow(
+							starters[t]!.stat.gMin,
+							g.get("quarterLength") * g.get("numPeriods"),
+						);
+					}
 				}
 			}
+		} finally {
+			Math.random = origRandom;
 		}
-
-		Math.random = origRandom;
 
 		const rate = hooks / (2 * numGames);
 		console.log(`goalie hook rate per team-game: ${rate}`);

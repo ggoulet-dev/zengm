@@ -98,6 +98,7 @@ const getPlayers = async ({
 	pidsRemove,
 	tid,
 	tradingPartnerTid,
+	contractOverride,
 }: {
 	add: Asset[];
 	remove: Asset[];
@@ -106,6 +107,7 @@ const getPlayers = async ({
 	pidsRemove: number[];
 	tid: number;
 	tradingPartnerTid?: number;
+	contractOverride?: { pid: number; contract: PlayerContract };
 }) => {
 	const season = g.get("season");
 	const phase = g.get("phase");
@@ -158,11 +160,15 @@ const getPlayers = async ({
 		const p = await idb.cache.players.get(pid);
 		if (p) {
 			const value = zscore(p.value);
+			const contract =
+				contractOverride && contractOverride.pid === pid
+					? contractOverride.contract
+					: p.contract;
 
 			add.push({
 				type: "player",
 				value,
-				contractValue: getContractValue(p.contract, value),
+				contractValue: getContractValue(contract, value),
 				injury: p.injury,
 				age: g.get("season") - p.born.year,
 				justDrafted: helpers.justDrafted(p, phase, season),
@@ -757,6 +763,7 @@ export class ValueChangeCalculator {
 		dpidsAdd,
 		dpidsRemove,
 		tradingPartnerTid,
+		contractOverride,
 	}: {
 		tid: number;
 		pidsAdd: number[];
@@ -764,6 +771,7 @@ export class ValueChangeCalculator {
 		dpidsAdd: number[];
 		dpidsRemove: number[];
 		tradingPartnerTid: number | undefined;
+		contractOverride?: { pid: number; contract: PlayerContract };
 	}): Promise<number> {
 		this.cache = await this.ensureCache();
 
@@ -787,6 +795,7 @@ export class ValueChangeCalculator {
 			pidsRemove,
 			tid,
 			tradingPartnerTid,
+			contractOverride,
 		});
 		await getPicks({
 			cache: this.cache,

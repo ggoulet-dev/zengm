@@ -353,7 +353,7 @@ const getThreeStars = (teams: [Team, Team]): Star[] => {
 					statText,
 					score,
 				});
-			} else if (p.gpSkater > 0 && (s.g > 0 || s.a > 0 || s.s > 0)) {
+			} else if (p.gpSkater > 0) {
 				const score = 1.4 * s.g + 0.9 * s.a + 0.01 * s.s;
 				const parts = [];
 				if (s.g > 0) {
@@ -381,7 +381,7 @@ const getThreeStars = (teams: [Team, Team]): Star[] => {
 
 const ThreeStars = ({ teams }: { teams: [Team, Team] }) => {
 	const stars = getThreeStars(teams);
-	if (stars.length < 3) {
+	if (stars.length === 0) {
 		return null;
 	}
 
