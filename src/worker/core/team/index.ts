@@ -14,6 +14,7 @@ import getContracts from "./getContracts.ts";
 import getDepthPlayers from "./getDepthPlayers.ts";
 import getPayroll from "./getPayroll.ts";
 import getPayrolls from "./getPayrolls.ts";
+import { manageFarmAll, manageFarmTeam } from "./manageFarm.hockey.ts";
 import ovr from "./ovr.ts";
 import processStats from "./processStats.ts";
 import ptsMax from "./ptsMax.ts";
@@ -43,6 +44,8 @@ export default {
 	getDepthPlayers,
 	getPayroll,
 	getPayrolls,
+	manageFarmAll,
+	manageFarmTeam,
 	ovr,
 	processStats,
 	ptsMax,

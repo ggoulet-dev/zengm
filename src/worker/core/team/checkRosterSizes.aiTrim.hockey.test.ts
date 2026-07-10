@@ -54,6 +54,8 @@ const makeRoster = (tid: number, counts: Record<string, [number, number]>) => {
 
 const setup = async (counts: Record<string, [number, number]>) => {
 	resetG();
+	// This suite is the regression coverage for the farm-system-OFF path (the trim only exists for 50-contract leagues without a farm)
+	g.setWithoutSavingToDB("farmSystem", false);
 	g.setWithoutSavingToDB("maxRosterSize", 50);
 	g.setWithoutSavingToDB("minRosterSize", 20);
 	g.setWithoutSavingToDB("numTeams", 2);
@@ -118,6 +120,7 @@ describe("AI roster trim in large-roster leagues", () => {
 		// Position count (5 > ceil(3)) would let the loop cut to 3 G, stranding the
 		// team with 1 healthy goalie - the health guard must keep 2 healthy.
 		resetG();
+		g.setWithoutSavingToDB("farmSystem", false);
 		g.setWithoutSavingToDB("maxRosterSize", 50);
 		g.setWithoutSavingToDB("minRosterSize", 20);
 		g.setWithoutSavingToDB("numTeams", 2);

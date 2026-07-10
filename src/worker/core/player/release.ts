@@ -36,6 +36,9 @@ const release = async (p: Player, justDrafted: boolean) => {
 		p.salaries = [];
 	}
 
+	// A genuine cut ends the farm assignment (unlike the re-sign round trip through addToFreeAgents, which preserves it)
+	delete p.farm;
+
 	logEvent({
 		type: "release",
 		text: `The <a href="${helpers.leagueUrl([

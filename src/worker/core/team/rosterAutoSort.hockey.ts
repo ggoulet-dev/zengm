@@ -1,4 +1,5 @@
 import { idb } from "../../db/index.ts";
+import { isOnFarm } from "./farm.hockey.ts";
 import genDepth from "./genDepth.hockey.ts";
 
 const rosterAutoSort = async (
@@ -18,9 +19,9 @@ const rosterAutoSort = async (
 
 	// The depth chart only contains active-roster players. Also strip farm pids from the stored depth so the onlyNewPlayers path can't keep a just-sent-down player in a line.
 	const farmPids = new Set(
-		playersFromCache.filter((p) => p.farm).map((p) => p.pid),
+		playersFromCache.filter((p) => isOnFarm(p)).map((p) => p.pid),
 	);
-	const activePlayers = playersFromCache.filter((p) => !p.farm);
+	const activePlayers = playersFromCache.filter((p) => !isOnFarm(p));
 
 	const depth = t.depth as {
 		F: number[];

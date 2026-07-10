@@ -11,6 +11,7 @@ import playThroughInjuriesFactor from "../../../common/playThroughInjuriesFactor
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { last } from "../../../common/utils.ts";
 import { getEffectivePlayThroughInjuries } from "./suspension.hockey.ts";
+import { isOnFarm } from "../team/farm.hockey.ts";
 
 const MAX_NUM_PLAYERS_PACE = 7;
 
@@ -482,7 +483,7 @@ const loadTeams = async (tids: number[], conditions: Conditions) => {
 				]);
 
 				// Farm players never dress, even as emergency injury fill
-				const players = playersAll.filter((p) => !p.farm);
+				const players = playersAll.filter((p) => !isOnFarm(p));
 
 				if (!team) {
 					throw new Error("Invalid tid");

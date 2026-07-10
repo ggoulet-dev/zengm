@@ -1,4 +1,5 @@
 import { player, team } from "../core/index.ts";
+import { isOnFarm } from "../core/team/farm.hockey.ts";
 import { idb } from "../db/index.ts";
 import { g } from "../util/index.ts";
 import { posRatings } from "../../common/posRatings.ts";
@@ -197,7 +198,7 @@ const updateDepth = async (
 		];
 		const playersAll = (
 			await idb.cache.players.indexGetAll("playersByTid", tid)
-		).filter((p) => !p.farm);
+		).filter((p) => !isOnFarm(p));
 		const players = addFirstNameShort(
 			await idb.getCopies.playersPlus(playersAll, {
 				attrs: [

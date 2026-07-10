@@ -111,9 +111,11 @@ const getSeasonInfoLeague = async ({
 
 	let pid = pidOffset;
 
+	const farmSystem = await getGameAttribute("farmSystem");
+
 	const players = (await getPlayersActiveSeason(league, season)).filter((p) => {
 		// For the ongoing season, the roster is "the team as it stands now" — farm players don't dress
-		if (isCurrentOngoingSeason && p.farm) {
+		if (isCurrentOngoingSeason && farmSystem && p.farm) {
 			return false;
 		}
 

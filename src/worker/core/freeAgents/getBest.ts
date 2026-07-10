@@ -5,6 +5,7 @@ import {
 	POSITION_COUNTS,
 } from "../../../common/constants.ts";
 import { getTeamOvrDiffs } from "../draft/runPicks.ts";
+import { farmEnabled, isOnFarm } from "../team/farm.hockey.ts";
 import { last, orderBy } from "../../../common/utils.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 
@@ -52,11 +53,16 @@ const getBest = <T extends PlayerWithoutKey>(
 
 	const aiRosterTarget = getAiRosterTarget();
 
+	// Free agents fill ACTIVE roster holes. Counting farm prospects here would permanently satisfy every size check (the org holds ~40+ contracts) and kill AI free agency.
+	const activeRoster = farmEnabled()
+		? playersOnRoster.filter((p) => !isOnFarm(p))
+		: playersOnRoster;
+
 	// Position counts of the current roster, to keep min-contract filler from stacking one position (like 11 centers when POSITION_COUNTS says 5)
 	let positionCountsRoster: Record<string, number> | undefined;
 	if (Object.keys(POSITION_COUNTS).length > 0) {
 		positionCountsRoster = {};
-		for (const p of playersOnRoster) {
+		for (const p of activeRoster) {
 			const pos = last(p.ratings).pos;
 			positionCountsRoster[pos] = (positionCountsRoster[pos] ?? 0) + 1;
 		}
@@ -80,7 +86,7 @@ const getBest = <T extends PlayerWithoutKey>(
 		});
 
 		const teamOvrDiffs = getTeamOvrDiffs(
-			playersOnRoster,
+			activeRoster,
 			playersAvailableFiltered,
 		);
 		const wrapper = playersAvailableFiltered.map((p, i) => ({
@@ -113,7 +119,7 @@ const getBest = <T extends PlayerWithoutKey>(
 				healthy: {},
 			};
 
-			for (const p of playersOnRoster) {
+			for (const p of activeRoster) {
 				const pos = last(p.ratings).pos;
 				const injured = p.injury.gamesRemaining > 0;
 				const object = positionCounts[injured ? "injured" : "healthy"];
@@ -158,13 +164,13 @@ const getBest = <T extends PlayerWithoutKey>(
 		const shouldAddPlayerNormal =
 			salaryCapCheck &&
 			p.contract.amount > minContract &&
-			(!isSport("hockey") || playersOnRoster.length < aiRosterTarget + 3);
+			(!isSport("hockey") || activeRoster.length < aiRosterTarget + 3);
 		const shouldAddPlayerMinContract = isSport("hockey")
 			? p.contract.amount <= minContract &&
-				playersOnRoster.length < aiRosterTarget &&
+				activeRoster.length < aiRosterTarget &&
 				!positionFull
 			: p.contract.amount <= minContract &&
-				playersOnRoster.length < maxRosterSize - 2;
+				activeRoster.length < maxRosterSize - 2;
 
 		// If none of the other checks were true and we can afford this player and it's at a position we have nobody at (like hockey goalie), go for it
 		const shouldAddPlayerPosition =

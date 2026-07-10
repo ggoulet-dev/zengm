@@ -1,4 +1,5 @@
 import { player, season, team } from "../core/index.ts";
+import { isOnFarm } from "../core/team/farm.hockey.ts";
 import { idb } from "../db/index.ts";
 import { g, helpers } from "../util/index.ts";
 import type {
@@ -268,10 +269,10 @@ export const getTopPlayers = async <T extends any[]>(
 			// Keep in sync with getDepthPlayers.ts
 			const depthPlayers = depth
 				.map((pid) => playersByPid[pid])
-				.filter((p) => p?.tid === t.tid && !p.farm) // Before season, AI teams may not have updated depth
+				.filter((p) => p?.tid === t.tid && !isOnFarm(p)) // Before season, AI teams may not have updated depth
 				.concat(
 					(playersByTid.get(t.tid) ?? []).map((p) =>
-						depthPidsSet.has(p.pid) || p.farm ? undefined : p,
+						depthPidsSet.has(p.pid) || isOnFarm(p) ? undefined : p,
 					),
 				)
 				.filter((p) => p !== undefined);

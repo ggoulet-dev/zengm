@@ -9,6 +9,8 @@ import {
 	KEY_POSITIONS_NEEDED,
 } from "../freeAgents/getBest.ts";
 import { getRfaRightsTid } from "../freeAgents/rfa.hockey.ts";
+import { farmEnabled, isOnFarm } from "./farm.hockey.ts";
+import { manageFarmTeam } from "./manageFarm.hockey.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 import { last, orderBy } from "../../../common/utils.ts";
 
@@ -136,7 +138,58 @@ const checkRosterSizes = async (
 	const releasedPIDs: number[] = [];
 
 	const checkRosterSize = async (tid: number, userTeamAndActive: boolean) => {
-		const players = await idb.cache.players.indexGetAll("playersByTid", tid);
+		const useFarm = farmEnabled();
+
+		let allPlayers = await idb.cache.players.indexGetAll("playersByTid", tid);
+
+		// With the farm system, min/maxRosterSize apply to the ACTIVE roster only; the whole organization is bounded by maxContracts
+		if (useFarm && allPlayers.length > g.get("maxContracts")) {
+			if (userTeamAndActive) {
+				if (g.get("userTids").length <= 1) {
+					userTeamSizeError = "Your organization has ";
+				} else {
+					userTeamSizeError = `The ${g.get("teamInfoCache")[tid]?.region} ${
+						g.get("teamInfoCache")[tid]?.name
+					} have `;
+				}
+
+				userTeamSizeError += `more than the maximum number of contracts (${g.get(
+					"maxContracts",
+				)}). You must remove players (by <a href="${helpers.leagueUrl([
+					"roster",
+				])}">releasing them</a> or through <a href="${helpers.leagueUrl([
+					"trade",
+				])}">trades</a>) before continuing.`;
+			} else {
+				// Release worst-value players, from the farm first
+				const numToDrop = allPlayers.length - g.get("maxContracts");
+				const farmPlayers = allPlayers.filter((p) => isOnFarm(p));
+				const releasedFromFarm = await dropPlayers(farmPlayers, numToDrop);
+				releasedPIDs.push(...releasedFromFarm);
+
+				const remainingToDrop = numToDrop - releasedFromFarm.length;
+				if (remainingToDrop > 0) {
+					const activePlayers = allPlayers.filter((p) => !isOnFarm(p));
+					const releasedFromActive = await dropPlayers(
+						activePlayers,
+						remainingToDrop,
+					);
+					releasedPIDs.push(...releasedFromActive);
+				}
+
+				allPlayers = await idb.cache.players.indexGetAll("playersByTid", tid);
+			}
+		}
+
+		// AI farm management: surplus send-downs, injury call-ups, and quality promotions all happen before the active-roster size checks, so residual violations below are real (no eligible farm moves left)
+		if (useFarm && !userTeamAndActive) {
+			await manageFarmTeam(tid);
+			allPlayers = await idb.cache.players.indexGetAll("playersByTid", tid);
+		}
+
+		const players = useFarm
+			? allPlayers.filter((p) => !isOnFarm(p))
+			: allPlayers;
 		let numPlayersOnRoster = players.length;
 
 		if (numPlayersOnRoster > g.get("maxRosterSize")) {
@@ -151,11 +204,19 @@ const checkRosterSizes = async (
 
 				userTeamSizeError += `more than the maximum number of players (${g.get(
 					"maxRosterSize",
-				)}). You must remove players (by <a href="${helpers.leagueUrl([
-					"roster",
-				])}">releasing them from your roster</a> or through <a href="${helpers.leagueUrl(
-					["trade"],
-				)}">trades</a>) before continuing.`;
+				)})${
+					useFarm ? " on the active roster" : ""
+				}. You must remove players (by ${
+					useFarm
+						? `<a href="${helpers.leagueUrl([
+								"roster",
+							])}">sending them down to the minors or releasing them</a>`
+						: `<a href="${helpers.leagueUrl([
+								"roster",
+							])}">releasing them from your roster</a>`
+				} or through <a href="${helpers.leagueUrl([
+					"trade",
+				])}">trades</a>) before continuing.`;
 			} else {
 				const releasedPIDsTemp = await dropPlayers(
 					players,
@@ -175,9 +236,15 @@ const checkRosterSizes = async (
 
 				userTeamSizeError += `less than the minimum number of players (${g.get(
 					"minRosterSize",
-				)}). You must add players (through <a href="${helpers.leagueUrl([
+				)})${useFarm ? " on the active roster" : ""}. You must add players (${
+					useFarm
+						? `by <a href="${helpers.leagueUrl([
+								"roster",
+							])}">calling them up from the minors</a>, through `
+						: "through "
+				}<a href="${helpers.leagueUrl([
 					"free_agents",
-				])}">free agency</a> or <a href="${helpers.leagueUrl([
+				])}">free agency</a>, or <a href="${helpers.leagueUrl([
 					"trade",
 				])}">trades</a>) before continuing.<br><br>Reminder: you can always sign free agents to ${helpers.formatCurrency(
 					g.get("minContract") / 1000,
@@ -185,7 +252,7 @@ const checkRosterSizes = async (
 					2,
 				)}/yr contracts, even if you're over the cap!`;
 			} else {
-				// Auto-add players
+				// Auto-add players. Farm call-ups already happened in manageFarmTeam above, so any remaining shortfall needs free agents.
 				while (numPlayersOnRoster < g.get("minRosterSize")) {
 					// See also core.phase
 					let p: any = minFreeAgents.shift();
@@ -195,12 +262,15 @@ const checkRosterSizes = async (
 					}
 
 					await player.sign(p, tid, p.contract, g.get("phase"));
+					// A min-fill signing must produce an active player, even if the signee somehow carried a stale farm flag
+					delete p.farm;
 					await idb.cache.players.put(p);
 					numPlayersOnRoster += 1;
 				}
 			}
 		} else if (
 			isSport("hockey") &&
+			!useFarm &&
 			!userTeamAndActive &&
 			Object.keys(POSITION_COUNTS).length > 0 &&
 			numPlayersOnRoster > getAiRosterTarget() + 3

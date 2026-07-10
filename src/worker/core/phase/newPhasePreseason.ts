@@ -532,6 +532,9 @@ const newPhasePreseason = async (
 		await idb.cache.players.put(p);
 	}
 
+	// After development and value updates, AI teams settle their opening rosters: promote prospects who now crack the lineup, send down the ones who don't
+	await team.manageFarmAll();
+
 	await realRosters.checkDisableForceHistoricalRosters(
 		newSeason,
 		PHASE.PRESEASON,

@@ -35,9 +35,9 @@ beforeEach(() => {
 });
 
 describe("getAiRosterTarget", () => {
-	test("default league: same as the old maxRosterSize - 2", () => {
-		// Hockey defaults: maxRosterSize 26, minRosterSize 24
-		assert.strictEqual(getAiRosterTarget(), 24);
+	test("default league: capped by the NHL-style active roster limit", () => {
+		// Hockey defaults: maxRosterSize 23, minRosterSize 20 (active roster limits with the farm system)
+		assert.strictEqual(getAiRosterTarget(), 21);
 	});
 
 	test("NHL 50-contract league: functional roster, not maxRosterSize - 2", () => {
@@ -108,17 +108,31 @@ describe("getBest roster discipline in large-roster leagues", () => {
 });
 
 describe("getBest position balance in a default-size league", () => {
-	// Hockey defaults: maxRosterSize 26, minRosterSize 24, getAiRosterTarget() 24.
+	// Hockey defaults: maxRosterSize 23, minRosterSize 20, getAiRosterTarget() 21.
 	// The positionFull gate is a deliberate change from upstream (which would
 	// stack an 11th winger as filler); it keeps AI rosters position-balanced.
 	test("min-contract filler skips a full position even below the roster target", () => {
 		const minContract = g.get("minContract");
-		const roster = makeRoster({ C: 3, W: 10, D: 6, G: 3 }); // 22 < target 24, W full
+		const roster = makeRoster({ C: 3, W: 10, D: 4, G: 2 }); // 19 < target 21, W full
 
 		assert.strictEqual(
 			getBest(roster, [makePlayer("W", minContract)], 0),
 			undefined,
 		);
+
+		const poolC = [makePlayer("C", minContract)];
+		assert.strictEqual(getBest(roster, poolC, 0), poolC[0]);
+	});
+
+	test("farm players don't count toward any roster-size gate", () => {
+		const minContract = g.get("minContract");
+		const roster = makeRoster({ C: 3, W: 9, D: 4, G: 2 }); // 18 active < target 21
+		for (let i = 0; i < 25; i++) {
+			// A full farm of prospects must not satisfy the size checks and kill AI free agency
+			const p = makePlayer("W", minContract, 40);
+			p.farm = true;
+			roster.push(p);
+		}
 
 		const poolC = [makePlayer("C", minContract)];
 		assert.strictEqual(getBest(roster, poolC, 0), poolC[0]);

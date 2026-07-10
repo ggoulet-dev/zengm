@@ -636,6 +636,9 @@ const play = async (
 
 					if (g.get("phase") !== PHASE.PLAYOFFS) {
 						await team.checkRosterSizes("other");
+					} else {
+						// checkRosterSizes doesn't run in the playoffs, but AI teams still need farm call-ups when injuries hit
+						await team.manageFarmAll();
 					}
 
 					await cbPlayGames();

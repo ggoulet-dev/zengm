@@ -6,6 +6,7 @@ import type {
 	ViewInput,
 } from "../../common/types.ts";
 import { team } from "../core/index.ts";
+import { isOnFarm } from "../core/team/farm.hockey.ts";
 import {
 	NOT_REAL_POSITIONS,
 	POSITIONS,
@@ -61,7 +62,7 @@ export const addPowerRankingsStuffToTeams = async <
 			if (g.get("season") === season) {
 				teamPlayers = (
 					await idb.cache.players.indexGetAll("playersByTid", t.tid)
-				).filter((p) => !p.farm);
+				).filter((p) => !isOnFarm(p));
 			} else {
 				teamPlayers = await idb.getCopies.players(
 					{

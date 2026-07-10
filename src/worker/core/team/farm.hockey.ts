@@ -9,6 +9,10 @@ import type { Player } from "../../../common/types.ts";
 
 export const farmEnabled = () => isSport("hockey") && g.get("farmSystem");
 
+// Single source of truth for "this player doesn't dress". When farmSystem is
+// disabled, players with a leftover farm flag behave as actives everywhere.
+export const isOnFarm = (p: { farm?: boolean }) => farmEnabled() && !!p.farm;
+
 // Career regular-season NHL games played. Farm players accumulate no stats
 // rows, so time in the minors never counts toward losing waiver exemption.
 export const careerRegularSeasonGp = (p: Pick<Player, "stats">) => {
@@ -50,7 +54,7 @@ export const splitFarm = <T extends { farm?: boolean }>(players: T[]) => {
 	const active: T[] = [];
 	const farm: T[] = [];
 	for (const p of players) {
-		if (p.farm) {
+		if (isOnFarm(p)) {
 			farm.push(p);
 		} else {
 			active.push(p);
