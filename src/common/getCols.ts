@@ -3061,6 +3061,11 @@ const cols: {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
+	"Call Up": {
+		desc: "Call Up From The Minors",
+		noSearch: true,
+		sortSequence: [],
+	},
 	"Cap Space": {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
@@ -3473,6 +3478,11 @@ const cols: {
 	Seed: {
 		desc: "Playoff Seed",
 		sortType: "number",
+	},
+	"Send Down": {
+		desc: "Send Down To The Minors",
+		noSearch: true,
+		sortSequence: [],
 	},
 	Skills: {},
 	Start: {

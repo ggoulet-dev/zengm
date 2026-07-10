@@ -84,6 +84,15 @@ import {
 	saveAwardsByPlayer,
 } from "../core/season/awards.ts";
 import { getScore } from "../core/player/checkJerseyNumberRetirement.ts";
+import {
+	farmEnabled,
+	isFarmEligible,
+	isOnFarm,
+} from "../core/team/farm.hockey.ts";
+import {
+	FARM_ELIGIBLE_MAX_AGE,
+	FARM_ELIGIBLE_MAX_CAREER_GP,
+} from "../../common/constants.hockey.ts";
 import type { NewLeagueTeam } from "../../ui/views/NewLeague/types.ts";
 import { PointsFormulaEvaluator } from "../core/team/evaluatePointsFormula.ts";
 import type { Settings } from "../views/settings.ts";
@@ -3186,6 +3195,96 @@ const releasePlayer = async ({ pids }: { pids: number[] }) => {
 	});
 };
 
+const setFarmStatus = async (pids: number[], toFarm: boolean) => {
+	if (!farmEnabled()) {
+		return "The farm system is disabled";
+	}
+	if (pids.length === 0) {
+		return;
+	}
+
+	const phase = g.get("phase");
+	if (phase === PHASE.FANTASY_DRAFT || phase === PHASE.EXPANSION_DRAFT) {
+		return "You aren't allowed to do this now";
+	}
+
+	const userTid = g.get("userTid");
+
+	const players = [];
+	for (const pid of pids) {
+		const p = await idb.cache.players.get(pid);
+		if (!p) {
+			return "Player not found";
+		}
+		if (p.tid !== userTid) {
+			return "You aren't allowed to do this";
+		}
+		players.push(p);
+	}
+
+	if (toFarm) {
+		const numActive = (
+			await idb.cache.players.indexGetAll("playersByTid", userTid)
+		).filter((p) => !isOnFarm(p)).length;
+		if (numActive - players.length < g.get("minRosterSize")) {
+			return `You must keep at least ${g.get(
+				"minRosterSize",
+			)} players on your active roster`;
+		}
+
+		for (const p of players) {
+			if (isOnFarm(p)) {
+				return `${p.firstName} ${p.lastName} is already in the minors`;
+			}
+			if (!isFarmEligible(p)) {
+				return `${p.firstName} ${p.lastName} is not waiver-exempt (over ${FARM_ELIGIBLE_MAX_AGE} years old with ${FARM_ELIGIBLE_MAX_CAREER_GP}+ career games) and can't be sent down`;
+			}
+			if (p.injury.gamesRemaining > 0) {
+				return `${p.firstName} ${p.lastName} is injured and can't be sent down`;
+			}
+		}
+	} else {
+		const numActive = (
+			await idb.cache.players.indexGetAll("playersByTid", userTid)
+		).filter((p) => !isOnFarm(p)).length;
+		if (numActive + players.length > g.get("maxRosterSize")) {
+			return `Your active roster is full (${g.get(
+				"maxRosterSize",
+			)} players) - send someone down first`;
+		}
+
+		for (const p of players) {
+			if (!isOnFarm(p)) {
+				return `${p.firstName} ${p.lastName} is not in the minors`;
+			}
+		}
+	}
+
+	for (const p of players) {
+		if (toFarm) {
+			p.farm = true;
+		} else {
+			delete p.farm;
+		}
+		await idb.cache.players.put(p);
+	}
+
+	// Insert recalled players into the depth chart (or fully re-sort if the user keeps it sorted); send-downs just get stripped from it
+	const t = await idb.cache.teams.get(userTid);
+	await team.rosterAutoSort(userTid, !t?.keepRosterSorted);
+
+	await toUI("realtimeUpdate", [["playerMovement"]]);
+	await recomputeLocalUITeamOvrs();
+};
+
+const assignToFarm = async ({ pids }: { pids: number[] }) => {
+	return setFarmStatus(pids, true);
+};
+
+const recallFromFarm = async ({ pids }: { pids: number[] }) => {
+	return setFarmStatus(pids, false);
+};
+
 const expandVote = (
 	params: { override: boolean; userVote: boolean },
 	conditions: Conditions,
@@ -5235,6 +5334,7 @@ export default {
 		allStarDraftReset,
 		allStarDraftSetPlayers,
 		allStarGameNow,
+		assignToFarm,
 		autoSortRoster,
 		beforeView,
 		cancelContractNegotiation,
@@ -5308,6 +5408,7 @@ export default {
 		ratingsStatsPopoverInfo,
 		reSignAll,
 		realtimeUpdate,
+		recallFromFarm,
 		regenerateDraftClass,
 		regenerateSchedule,
 		releasePlayer,

@@ -86,13 +86,33 @@ const handleRelease = async (
 	}
 };
 
+const handleFarmMove = async (
+	pids: number[],
+	direction: "assignToFarm" | "recallFromFarm",
+) => {
+	const errorMsg = await toWorker("main", direction, {
+		pids,
+	});
+	if (errorMsg) {
+		logEvent({
+			type: "error",
+			text: errorMsg,
+			saveToDb: false,
+		});
+	}
+};
+
 const Roster = ({
 	abbrev,
+	buriedCap,
 	editable,
+	farmSystem,
 	luxuryTaxAmount,
+	maxContracts,
 	maxRosterSize,
 	minPayrollAmount,
 	numPlayersOnCourt,
+	numTotalContracts,
 	payroll,
 	players,
 	playoffs,
@@ -143,20 +163,27 @@ const Roster = ({
 		setPrevPlayers(players);
 	}
 
+	// The main table shows the active roster; farm players get their own table below
+	const activePlayers = farmSystem ? players.filter((p) => !p.farm) : players;
+	const farmPlayers = farmSystem ? players.filter((p) => p.farm) : [];
+
 	// Use the result of drag and drop to sort players, before the "official" order comes back as props
 	let playersSorted: typeof players;
 	if (sortedPids !== undefined) {
-		const playersByPid = groupByUnique(players, "pid");
+		const playersByPid = groupByUnique(activePlayers, "pid");
 		playersSorted = sortedPids
 			.map((pid) => playersByPid[pid])
 			.filter((p) => p !== undefined);
 	} else {
-		playersSorted = players;
+		playersSorted = activePlayers;
 	}
 
 	const profit = t.seasonAttrs !== undefined ? t.seasonAttrs.profit : 0;
 
 	const showMood = season === currentSeason;
+
+	// Farm moves are only for the user's current team (same gate as Release)
+	const showFarmActions = farmSystem && showRelease;
 
 	const cols = getCols(
 		[
@@ -171,6 +198,7 @@ const Roster = ({
 			...stats.map((stat) => `stat:${stat}`),
 			...(editable ? ["PT"] : []),
 			...(showMood ? ["Mood"] : []),
+			...(showFarmActions ? ["Send Down"] : []),
 			...(showRelease ? ["Release"] : []),
 			...(showTradeFor || showTradingBlock ? ["Trade"] : []),
 			"Acquired",
@@ -258,6 +286,138 @@ const Roster = ({
 	// Sort by pos for non-basketball sports
 	const defaultSortCol = 1;
 
+	const farmCols = farmSystem
+		? getCols(
+				[
+					"Name",
+					"Pos",
+					"Age",
+					"Ovr",
+					"Pot",
+					"Contract",
+					"Country",
+					...(showMood ? ["Mood"] : []),
+					...(showFarmActions ? ["Call Up"] : []),
+					...(showRelease ? ["Release"] : []),
+					...(showTradeFor || showTradingBlock ? ["Trade"] : []),
+					"Acquired",
+				],
+				{
+					Country: {
+						title: "",
+						desc: "Country",
+					},
+				},
+			)
+		: undefined;
+
+	const farmRows: DataTableRow[] = farmPlayers.map((p) => {
+		const showRatings = !challengeNoRatings;
+
+		return {
+			key: p.pid,
+			metadata: {
+				type: "player",
+				pid: p.pid,
+				season,
+				playoffs,
+			},
+			data: [
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					season,
+					skills: p.ratings.skills,
+					defaultWatch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+					awards: p.awards,
+					neverShowCountry: true,
+				}),
+				p.ratings.pos,
+				p.age,
+				showRatings
+					? wrappedRatingWithChange(p.ratings.ovr, p.ratings.dovr)
+					: null,
+				showRatings
+					? wrappedRatingWithChange(p.ratings.pot, p.ratings.dpot)
+					: null,
+				wrappedContract(p),
+				{
+					value: (
+						<a
+							href={helpers.leagueUrl([
+								"frivolities",
+								"most",
+								"country",
+								window.encodeURIComponent(helpers.getCountry(p.born.loc)),
+							])}
+						>
+							<CountryFlag country={p.born.loc} />
+						</a>
+					),
+					sortValue: p.born.loc,
+					searchValue: p.born.loc,
+				},
+				...(showMood
+					? [
+							wrappedMood({
+								defaultType: "current",
+								maxWidth: true,
+								p,
+							}),
+						]
+					: []),
+				...(showFarmActions
+					? [
+							<button
+								className="btn btn-light-bordered btn-xs"
+								onClick={() => handleFarmMove([p.pid], "recallFromFarm")}
+							>
+								Call up
+							</button>,
+						]
+					: []),
+				...(showRelease
+					? [
+							<button
+								className="btn btn-light-bordered btn-xs"
+								disabled={!p.canRelease}
+								onClick={() => handleRelease(p, phase, currentSeason, gender)}
+							>
+								Release
+							</button>,
+						]
+					: []),
+				...(showTradeFor || showTradingBlock
+					? [
+							<button
+								className="btn btn-light-bordered btn-xs"
+								disabled={p.untradable}
+								onClick={() => {
+									if (showTradeFor) {
+										toWorker("actions", "tradeFor", { pid: p.pid });
+									} else {
+										toWorker("actions", "addToTradingBlock", {
+											pids: [p.pid],
+										});
+									}
+								}}
+							>
+								{showTradeFor ? "Trade for" : "Trade away"}
+							</button>,
+						]
+					: []),
+				{
+					value: <SafeHtml dirty={p.latestTransaction} />,
+					sortValue: p.latestTransaction,
+					searchValue: p.latestTransaction,
+				},
+			],
+		};
+	});
+
 	const rows: DataTableRow[] = playersSorted.map((p, i) => {
 		const showRatings = !challengeNoRatings || p.tid === PLAYER.RETIRED;
 
@@ -339,6 +499,24 @@ const Roster = ({
 							}),
 						]
 					: []),
+				...(showFarmActions
+					? [
+							<button
+								className="btn btn-light-bordered btn-xs"
+								disabled={!p.canSendDown}
+								title={
+									p.canSendDown
+										? undefined
+										: p.injury.gamesRemaining > 0
+											? "Injured players can't be sent down"
+											: "Not waiver-exempt (too old or too many career games)"
+								}
+								onClick={() => handleFarmMove([p.pid], "assignToFarm")}
+							>
+								Send down
+							</button>,
+						]
+					: []),
 				...(showRelease
 					? [
 							<button
@@ -390,12 +568,17 @@ const Roster = ({
 
 			<TopStuff
 				abbrev={abbrev}
+				buriedCap={buriedCap}
 				currentSeason={currentSeason}
 				editable={editable}
+				farmSystem={farmSystem}
 				luxuryTaxAmount={luxuryTaxAmount}
+				maxContracts={maxContracts}
 				minPayrollAmount={minPayrollAmount}
-				openRosterSpots={maxRosterSize - players.length}
-				players={players}
+				numFarmPlayers={farmPlayers.length}
+				numTotalContracts={numTotalContracts}
+				openRosterSpots={maxRosterSize - activePlayers.length}
+				players={activePlayers}
 				playoffsByConf={playoffsByConf}
 				season={season}
 				payroll={payroll}
@@ -539,6 +722,24 @@ const Roster = ({
 						: undefined
 				}
 			/>
+
+			{farmSystem ? (
+				<>
+					<h2 className="mt-4">Minors (AHL)</h2>
+					{farmPlayers.length === 0 ? (
+						<p>No players in the minors.</p>
+					) : (
+						<DataTable
+							cols={farmCols!}
+							defaultSort={[1, "asc"]}
+							defaultStickyCols={window.mobile ? 0 : 1}
+							name="Roster:Farm"
+							rows={farmRows}
+							nonfluid
+						/>
+					)}
+				</>
+			) : null}
 		</>
 	);
 };

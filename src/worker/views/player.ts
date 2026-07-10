@@ -60,6 +60,7 @@ export const getPlayer = async (
 				| "contract"
 				| "diedYear"
 				| "face"
+				| "farm"
 				| "imgURL"
 				| "injury"
 				| "injuries"
@@ -115,6 +116,7 @@ export const getPlayer = async (
 			"contract",
 			"draft",
 			"face",
+			"farm",
 			"mood",
 			"injury",
 			"injuries",

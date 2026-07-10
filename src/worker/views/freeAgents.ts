@@ -13,6 +13,7 @@ import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { loadAbbrevs } from "./gameLog.ts";
 import { bySport } from "../../common/sportFunctions.ts";
 import { getRfaRightsTid, rfaEnabled } from "../core/freeAgents/rfa.hockey.ts";
+import { isOnFarm } from "../core/team/farm.hockey.ts";
 
 export const addMood = async (players: Player[]) => {
 	const moods: Awaited<ReturnType<(typeof player)["moodInfos"]>>[] = [];
@@ -241,7 +242,9 @@ const updateFreeAgents = async (
 			capSpace,
 			challengeNoFreeAgents: g.get("challengeNoFreeAgents"),
 			freeAgencySeason,
-			numRosterSpots: g.get("maxRosterSize") - userPlayers.length,
+			numRosterSpots:
+				g.get("maxRosterSize") -
+				playersByType.user.filter((p) => !isOnFarm(p)).length,
 			payroll: payroll / 1000,
 			players,
 			rfa: rfaEnabled() && season === "current",

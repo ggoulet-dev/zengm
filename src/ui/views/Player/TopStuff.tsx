@@ -511,6 +511,14 @@ const TopStuff = ({
 							<strong>
 								{bestPos},{" "}
 								{teamURL ? <a href={teamURL}>{teamName}</a> : teamName}
+								{player.farm ? (
+									<span
+										className="badge bg-secondary ms-1 align-text-bottom"
+										title="Assigned to the minor-league (farm) roster"
+									>
+										AHL
+									</span>
+								) : null}
 								{player.jerseyNumber ? (
 									<>
 										,{" "}

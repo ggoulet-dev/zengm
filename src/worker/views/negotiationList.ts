@@ -4,6 +4,7 @@ import { idb } from "../db/index.ts";
 import { g } from "../util/index.ts";
 import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { addMood, freeAgentStats } from "./freeAgents.ts";
+import { isOnFarm } from "../core/team/farm.hockey.ts";
 
 export const getNegotiationPids = async (tid: number) => {
 	const negotiations = await idb.cache.negotiations.getAll();
@@ -80,7 +81,9 @@ const updateNegotiationList = async () => {
 	return {
 		capSpace,
 		draftPickAutoContract: g.get("draftPickAutoContract"),
-		numRosterSpots: g.get("maxRosterSize") - userPlayersAll.length,
+		numRosterSpots:
+			g.get("maxRosterSize") -
+			userPlayersAll.filter((p) => !isOnFarm(p)).length,
 		payroll: payroll / 1000,
 		players,
 		stats,

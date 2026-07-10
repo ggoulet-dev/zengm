@@ -137,10 +137,15 @@ const PayrollAndPenalties = ({
 
 const TopStuff = ({
 	abbrev,
+	buriedCap,
 	currentSeason,
 	editable,
+	farmSystem,
 	luxuryTaxAmount,
+	maxContracts,
 	minPayrollAmount,
+	numFarmPlayers,
+	numTotalContracts,
 	openRosterSpots,
 	payroll,
 	players,
@@ -155,9 +160,13 @@ const TopStuff = ({
 }: Pick<
 	View<"roster">,
 	| "abbrev"
+	| "buriedCap"
 	| "editable"
+	| "farmSystem"
 	| "luxuryTaxAmount"
+	| "maxContracts"
 	| "minPayrollAmount"
+	| "numTotalContracts"
 	| "payroll"
 	| "players"
 	| "playoffsByConf"
@@ -169,6 +178,7 @@ const TopStuff = ({
 	| "usePts"
 > & {
 	currentSeason: number;
+	numFarmPlayers: number;
 	openRosterSpots: number;
 	profit: number;
 }) => {
@@ -293,7 +303,26 @@ const TopStuff = ({
 						</div>
 
 						{isCurrentSeason ? (
-							<div className="mt-3">{openRosterSpots} open roster spots</div>
+							<div className="mt-3">
+								{openRosterSpots} open{farmSystem ? " active" : ""} roster spots
+							</div>
+						) : null}
+						{isCurrentSeason && farmSystem ? (
+							<div>
+								Minors: {numFarmPlayers}{" "}
+								{helpers.plural("player", numFarmPlayers)} &middot; Contracts:{" "}
+								{numTotalContracts}/{maxContracts}
+								{buriedCap > 0 ? (
+									<>
+										{" "}
+										&middot;{" "}
+										<span title="Salary of players in the minors still counting against the cap (the buried-contract relief covers the rest)">
+											Buried cap:{" "}
+											{helpers.formatCurrency(buriedCap / 1000, "M")}
+										</span>
+									</>
+								) : null}
+							</div>
 						) : null}
 						{payroll !== undefined ? (
 							<div>

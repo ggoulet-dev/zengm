@@ -9,6 +9,12 @@ import type {
 	TeamSeasonAttr,
 } from "../../common/types.ts";
 import { addMood } from "./freeAgents.ts";
+import {
+	canSendDown,
+	capHit,
+	farmEnabled,
+	isOnFarm,
+} from "../core/team/farm.hockey.ts";
 import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { getActualPlayThroughInjuries } from "../core/game/loadTeams.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
@@ -174,6 +180,7 @@ const updateRoster = async (
 			"pid",
 			"tid",
 			"draft",
+			"farm",
 			"firstName",
 			"lastName",
 			"age",
@@ -200,6 +207,11 @@ const updateRoster = async (
 		let luxuryTaxAmount: number | undefined;
 		let minPayrollAmount: number | undefined;
 
+		const farmSystem = farmEnabled() && inputs.season === g.get("season");
+		let buriedCap = 0;
+		let numTotalContracts = 0;
+		const canSendDownByPid = new Map<number, boolean>();
+
 		if (inputs.season === g.get("season")) {
 			const schedule = await season.getSchedule();
 
@@ -210,6 +222,18 @@ const updateRoster = async (
 			payroll = await team.getPayroll(inputs.tid);
 			luxuryTaxAmount = finances.getLuxuryTaxAmount(payroll);
 			minPayrollAmount = finances.getMinPayrollAmount(payroll);
+
+			if (farmSystem) {
+				numTotalContracts = playersAll.length;
+				for (const p of playersAll) {
+					if (isOnFarm(p)) {
+						buriedCap += capHit(p.contract.amount, p.farm);
+						canSendDownByPid.set(p.pid, false);
+					} else {
+						canSendDownByPid.set(p.pid, canSendDown(p));
+					}
+				}
+			}
 
 			// numGamesRemaining doesn't need to be calculated except for userTid, but it is.
 			let numGamesRemaining = 0;
@@ -241,13 +265,17 @@ const updateRoster = async (
 				players.sort((a, b) => sortByPos(b) - sortByPos(a));
 			}
 
+			const numActivePlayers = farmSystem
+				? players.filter((p) => !p.farm).length
+				: players.length;
+
 			for (const p of players) {
 				// Can alway release player, even if below the minimum roster limit, cause why not. Except in the playoffs.
 				if (
 					inputs.tid === g.get("userTid") &&
 					(g.get("phase") !== PHASE.PLAYOFFS ||
 						(g.get("phase") === PHASE.PLAYOFFS &&
-							players.length > g.get("minRosterSize"))) &&
+							numActivePlayers > g.get("minRosterSize"))) &&
 					!g.get("gameOver") &&
 					!g.get("otherTeamsWantToHire") &&
 					g.get("phase") !== PHASE.FANTASY_DRAFT &&
@@ -257,6 +285,15 @@ const updateRoster = async (
 				} else {
 					p.canRelease = false;
 				}
+
+				p.canSendDown =
+					farmSystem &&
+					inputs.tid === g.get("userTid") &&
+					!g.get("spectator") &&
+					g.get("phase") !== PHASE.FANTASY_DRAFT &&
+					g.get("phase") !== PHASE.EXPANSION_DRAFT
+						? (canSendDownByPid.get(p.pid) ?? false)
+						: false;
 
 				// Convert ptModifier to string so it doesn't cause unneeded knockout re-rendering
 				p.ptModifier = String(p.ptModifier);
@@ -314,12 +351,15 @@ const updateRoster = async (
 
 		const { gb, playoffsByConf, rank, usePts } = await getStandingsInfo(inputs);
 
+		// Team strength comes from the active roster only
+		const playersForOvr = farmSystem ? players.filter((p) => !p.farm) : players;
+
 		const t2 = {
 			...t,
-			ovr: team.ovr(players, {
+			ovr: team.ovr(playersForOvr, {
 				playoffs: playoffsOvr,
 			}),
-			ovrCurrent: team.ovr(players, {
+			ovrCurrent: team.ovr(playersForOvr, {
 				accountForInjuredPlayers: {
 					numDaysInFuture: 0,
 					playThroughInjuries: getActualPlayThroughInjuries(t),
@@ -344,9 +384,13 @@ const updateRoster = async (
 
 		return {
 			abbrev: inputs.abbrev,
+			buriedCap,
 			editable,
+			farmSystem,
+			maxContracts: g.get("maxContracts"),
 			maxRosterSize: g.get("maxRosterSize"),
 			numPlayersOnCourt: g.get("numPlayersOnCourt"),
+			numTotalContracts,
 			luxuryTaxAmount,
 			minPayrollAmount,
 			payroll,
