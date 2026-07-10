@@ -59,10 +59,9 @@ export const addPowerRankingsStuffToTeams = async <
 			let teamPlayers;
 
 			if (g.get("season") === season) {
-				teamPlayers = await idb.cache.players.indexGetAll(
-					"playersByTid",
-					t.tid,
-				);
+				teamPlayers = (
+					await idb.cache.players.indexGetAll("playersByTid", t.tid)
+				).filter((p) => !p.farm);
 			} else {
 				teamPlayers = await idb.getCopies.players(
 					{

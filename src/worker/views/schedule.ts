@@ -268,10 +268,10 @@ export const getTopPlayers = async <T extends any[]>(
 			// Keep in sync with getDepthPlayers.ts
 			const depthPlayers = depth
 				.map((pid) => playersByPid[pid])
-				.filter((p) => p?.tid === t.tid) // Before season, AI teams may not have updated depth
+				.filter((p) => p?.tid === t.tid && !p.farm) // Before season, AI teams may not have updated depth
 				.concat(
 					(playersByTid.get(t.tid) ?? []).map((p) =>
-						depthPidsSet.has(p.pid) ? undefined : p,
+						depthPidsSet.has(p.pid) || p.farm ? undefined : p,
 					),
 				)
 				.filter((p) => p !== undefined);

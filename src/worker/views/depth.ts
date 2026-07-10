@@ -195,7 +195,9 @@ const updateDepth = async (
 				: ["hgt", "stre", "spd", "endu"]),
 			...posRatings(pos2),
 		];
-		const playersAll = await idb.cache.players.indexGetAll("playersByTid", tid);
+		const playersAll = (
+			await idb.cache.players.indexGetAll("playersByTid", tid)
+		).filter((p) => !p.farm);
 		const players = addFirstNameShort(
 			await idb.getCopies.playersPlus(playersAll, {
 				attrs: [

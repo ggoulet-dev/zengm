@@ -112,6 +112,11 @@ const getSeasonInfoLeague = async ({
 	let pid = pidOffset;
 
 	const players = (await getPlayersActiveSeason(league, season)).filter((p) => {
+		// For the ongoing season, the roster is "the team as it stands now" — farm players don't dress
+		if (isCurrentOngoingSeason && p.farm) {
+			return false;
+		}
+
 		// Keep players who ended the season on this team. Not perfect, will miss released players. Second check is for players added to the team in God Mode during the playoffs.
 		let seasonStats =
 			p.stats.findLast((row) => row.season === season && !row.playoffs) ??

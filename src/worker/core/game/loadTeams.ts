@@ -472,7 +472,7 @@ const loadTeams = async (tids: number[], conditions: Conditions) => {
 	} else {
 		await Promise.all(
 			tids.map(async (tid) => {
-				const [players, team, teamSeason] = await Promise.all([
+				const [playersAll, team, teamSeason] = await Promise.all([
 					idb.cache.players.indexGetAll("playersByTid", tid),
 					idb.cache.teams.get(tid),
 					idb.cache.teamSeasons.indexGet("teamSeasonsByTidSeason", [
@@ -480,6 +480,9 @@ const loadTeams = async (tids: number[], conditions: Conditions) => {
 						g.get("season"),
 					]),
 				]);
+
+				// Farm players never dress, even as emergency injury fill
+				const players = playersAll.filter((p) => !p.farm);
 
 				if (!team) {
 					throw new Error("Invalid tid");
