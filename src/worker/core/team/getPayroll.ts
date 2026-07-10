@@ -1,10 +1,13 @@
 import { idb } from "../../db/index.ts";
 import type { ContractInfo } from "../../../common/types.ts";
+import { capHit } from "./farm.hockey.ts";
 
 /**
  * Get the total current payroll for a team.
  *
  * This includes players who have been released but are still owed money from their old contracts.
+ *
+ * By default this is the salary cap view: farm players get buried-contract relief. Pass noFarmRelief for the cash view (players in the minors still get paid their full salary).
  *
  * @memberOf core.team
  * @param {number | ContractInfo[]} tid Team ID, or a list of contracts from getContracts.
@@ -13,6 +16,7 @@ import type { ContractInfo } from "../../../common/types.ts";
 const getPayroll = async (
 	input: number | ContractInfo[],
 	season?: number,
+	opts?: { noFarmRelief?: boolean },
 ): Promise<number> => {
 	let payroll = 0;
 
@@ -24,7 +28,16 @@ const getPayroll = async (
 			tid,
 		);
 
-		for (const p of [...players, ...releasedPlayers]) {
+		for (const p of players) {
+			if (season === undefined || p.contract.exp >= season) {
+				payroll += opts?.noFarmRelief
+					? p.contract.amount
+					: capHit(p.contract.amount, p.farm);
+			}
+		}
+
+		// Dead money from released players always counts in full
+		for (const p of releasedPlayers) {
 			if (season === undefined || p.contract.exp >= season) {
 				payroll += p.contract.amount;
 			}
@@ -36,7 +49,9 @@ const getPayroll = async (
 
 		const contracts = input;
 		for (const contract of contracts) {
-			payroll += contract.amount;
+			payroll += opts?.noFarmRelief
+				? contract.amount
+				: capHit(contract.amount, contract.farm);
 		}
 	}
 

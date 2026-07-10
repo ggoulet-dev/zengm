@@ -9,6 +9,7 @@ import type {
 import { last, orderBy } from "../../../common/utils.ts";
 import isUntradable from "./isUntradable.ts";
 import { bySport } from "../../../common/sportFunctions.ts";
+import { capHit } from "../team/farm.hockey.ts";
 
 // Minimum number of players a team must keep at each position for a trade to be allowed. Goalies are strict (nobody else can play there), skater positions are looser since the depth chart can shift players around.
 const MIN_PLAYERS_BY_POS = bySport<Record<string, number> | undefined>({
@@ -72,6 +73,10 @@ const summary = async (teams: TradeTeams): Promise<TradeSummary> => {
 	// Calculate properties of the trade
 	const playersAfter: [Player[], Player[]] = [[], []];
 	const rostersBefore: [Player[], Player[]] = [[], []];
+
+	// Salary cap charge of each side's outgoing players [millions]. Differs from s.teams[i].total when a farm player moves: his buried-contract relief travels with him, so the cap math must use cap hits while total keeps showing real salaries.
+	const capHitTotals: [number, number] = [0, 0];
+
 	for (const i of [0, 1] as const) {
 		const playersBefore = await idb.cache.players.indexGetAll(
 			"playersByTid",
@@ -85,6 +90,9 @@ const summary = async (teams: TradeTeams): Promise<TradeSummary> => {
 			"valueFuzz",
 			"desc",
 		);
+		capHitTotals[i] =
+			players.reduce((memo, p) => memo + capHit(p.contract.amount, p.farm), 0) /
+			1000;
 		players = await idb.getCopies.playersPlus(players, {
 			attrs: ["pid", "name", "contract", "draft"],
 			season: g.get("season"),
@@ -150,7 +158,7 @@ const summary = async (teams: TradeTeams): Promise<TradeSummary> => {
 
 		s.teams[j].payrollBeforeTrade = (await team.getPayroll(tids[j])) / 1000;
 		s.teams[j].payrollAfterTrade =
-			s.teams[j].payrollBeforeTrade + s.teams[k].total - s.teams[j].total;
+			s.teams[j].payrollBeforeTrade + capHitTotals[k] - capHitTotals[j];
 
 		if (s.teams[j].payrollAfterTrade > g.get("salaryCap") / 1000) {
 			overCap[j] = true;

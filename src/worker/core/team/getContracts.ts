@@ -29,6 +29,7 @@ const getContracts = async (tid: number): Promise<ContractInfo[]> => {
 			amount: p.contract.amount,
 			exp: p.contract.exp,
 			released: false,
+			farm: p.farm,
 		};
 	});
 
@@ -63,6 +64,7 @@ const getContracts = async (tid: number): Promise<ContractInfo[]> => {
 				amount: releasedPlayer.contract.amount,
 				exp: releasedPlayer.contract.exp,
 				released: true,
+				farm: undefined,
 			});
 		} else {
 			contracts.push({
@@ -80,6 +82,7 @@ const getContracts = async (tid: number): Promise<ContractInfo[]> => {
 				amount: releasedPlayer.contract.amount,
 				exp: releasedPlayer.contract.exp,
 				released: true,
+				farm: undefined,
 			});
 		}
 	}
