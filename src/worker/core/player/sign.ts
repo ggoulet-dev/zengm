@@ -53,6 +53,9 @@ const sign = async (
 
 	const freeAgent = !resigning && !isRookie;
 	if (freeAgent) {
+		// Signing with a new organization always lands on the active roster. Re-signings and rookie signings preserve a farm assignment (rookies round-trip through free agency every year under a hard cap).
+		delete p.farm;
+
 		if (!p.transactions) {
 			p.transactions = [];
 		}

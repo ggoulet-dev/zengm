@@ -1,5 +1,6 @@
 import { PHASE } from "../../../common/constants.ts";
 import { player, league, team } from "../index.ts";
+import { farmEnabled } from "../team/farm.hockey.ts";
 import getRookieSalaries from "./getRookieSalaries.ts";
 import { idb } from "../../db/index.ts";
 import { g, helpers, local, logEvent } from "../../util/index.ts";
@@ -37,6 +38,14 @@ const selectPlayer = async (dp: DraftPick, pid: number) => {
 
 	const fantasyOrExpansionDraft =
 		g.get("phase") === PHASE.FANTASY_DRAFT || expansionDraft.phase === "draft";
+
+	if (g.get("phase") === PHASE.FANTASY_DRAFT) {
+		// Fantasy draft redistributes the whole league onto active rosters
+		delete p.farm;
+	} else if (!fantasyOrExpansionDraft && farmEnabled()) {
+		// Drafted players start in the minors; the AI's daily pass (or the user) promotes the ones who crack the lineup. An expansion draft instead preserves the flag: farm prospects picked there stay minor-leaguers.
+		p.farm = true;
+	}
 
 	if (fantasyOrExpansionDraft) {
 		const fakeP = {

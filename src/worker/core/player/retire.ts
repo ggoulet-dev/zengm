@@ -88,6 +88,7 @@ const retire = async (
 	p.numDaysFreeAgent = 0;
 	p.gamesUntilTradable = 0;
 	delete p.numPlayersTradedAwayNormalized;
+	delete p.farm;
 
 	await player.checkJerseyNumberRetirement(p);
 };
