@@ -33,7 +33,7 @@ import develop from "../player/develop.ts";
 // This test lives under src/worker (web tsconfig, no node types), but runs in vitest's node
 // environment, so node APIs are reached dynamically to keep `tsc --build` clean.
 const DEFAULT_ROSTER =
-	"/Users/gabrielgoulet/Downloads/NHL_2025-2026_Post-Deadline_Rosters_with_2026_draft_rescaled_patched.json";
+	"nhl-rosters/NHL_2025-2026_Post-Deadline_Rosters_v2.json";
 
 const NUM_SEASONS = 10;
 const ROUNDS_PER_SEASON = 82; // each team plays 82 games via the circle method

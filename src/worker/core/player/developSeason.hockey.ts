@@ -190,7 +190,10 @@ const calcBaseChange = (
 	} else if (age <= 23) {
 		val += helpers.bound(realGauss(0, 11), -5, 40);
 	} else if (age <= 25) {
-		val += helpers.bound(realGauss(0, 7), -5, 18);
+		// Floor -3 (not -5): at 24-25 a floor draw lands on ~24% of skaters (sigma 7), and -5
+		// stacked with center posCoeffs (2x oiq/pss/fcf) produced -9 ovr collapses right after
+		// star seasons. The wide positive tail stays so late bloomers still emerge.
+		val += helpers.bound(realGauss(0, 7), -3, 18);
 	} else {
 		val += helpers.bound(realGauss(0, 3), -2, 4);
 	}

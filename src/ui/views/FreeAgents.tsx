@@ -181,8 +181,6 @@ const FreeAgents = ({
 		"Exp",
 		...(rfa ? ["RFA"] : []),
 		"Actions",
-		...(rfa ? ["RFA"] : []),
-		"Negotiate",
 	];
 	const cols = getCols(colKeys, {
 		Actions: {
