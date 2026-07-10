@@ -1633,6 +1633,13 @@ export type Team = {
 		text: string;
 	}[];
 
+	// Optional because no upgrade. Hockey farm system: identity of the minor-league affiliate (e.g. Laval Rocket for Montreal), display only
+	farmTeam?: {
+		region: string;
+		name: string;
+		abbrev?: string;
+	};
+
 	draftLottery?:
 		| {
 				type: "cola";

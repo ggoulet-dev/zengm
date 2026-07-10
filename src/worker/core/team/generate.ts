@@ -72,6 +72,10 @@ const generate = (tm: any): Team => {
 		t.srID = tm.srID;
 	}
 
+	if (tm.farmTeam !== undefined) {
+		t.farmTeam = tm.farmTeam;
+	}
+
 	if (isSport("football") && tm.depth === undefined) {
 		t.depth = {
 			QB: [],

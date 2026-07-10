@@ -725,7 +725,11 @@ const Roster = ({
 
 			{farmSystem ? (
 				<>
-					<h2 className="mt-4">Minors (AHL)</h2>
+					<h2 className="mt-4">
+						{t.farmTeam
+							? `Minors — ${t.farmTeam.region} ${t.farmTeam.name} (AHL)`
+							: "Minors (AHL)"}
+					</h2>
 					{farmPlayers.length === 0 ? (
 						<p>No players in the minors.</p>
 					) : (

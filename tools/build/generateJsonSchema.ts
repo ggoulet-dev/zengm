@@ -2371,6 +2371,21 @@ export const generateJsonSchema = (sport: Sport | "test") => {
 								required: ["number", "seasonRetired", "seasonTeamInfo", "text"],
 							},
 						},
+						farmTeam: {
+							type: "object",
+							properties: {
+								region: {
+									type: "string",
+								},
+								name: {
+									type: "string",
+								},
+								abbrev: {
+									type: "string",
+								},
+							},
+							required: ["region", "name"],
+						},
 						srID: {
 							type: "string",
 						},
