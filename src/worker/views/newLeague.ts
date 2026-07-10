@@ -313,6 +313,8 @@ export const getDefaultSettings = () => {
 		hitFactor: unwrapGameAttribute(defaultGameAttributes, "hitFactor"),
 		fightFactor: unwrapGameAttribute(defaultGameAttributes, "fightFactor"),
 		rfa: unwrapGameAttribute(defaultGameAttributes, "rfa"),
+		farmSystem: unwrapGameAttribute(defaultGameAttributes, "farmSystem"),
+		maxContracts: unwrapGameAttribute(defaultGameAttributes, "maxContracts"),
 		giveawayFactor: unwrapGameAttribute(
 			defaultGameAttributes,
 			"giveawayFactor",

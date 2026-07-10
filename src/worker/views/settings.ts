@@ -135,6 +135,8 @@ type Key =
 	| "hitFactor"
 	| "fightFactor"
 	| "rfa"
+	| "farmSystem"
+	| "maxContracts"
 	| "giveawayFactor"
 	| "takeawayFactor"
 	| "deflectionFactor"
@@ -359,6 +361,8 @@ const updateSettings = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			hitFactor: g.get("hitFactor"),
 			fightFactor: g.get("fightFactor"),
 			rfa: g.get("rfa"),
+			farmSystem: g.get("farmSystem"),
+			maxContracts: g.get("maxContracts"),
 			giveawayFactor: g.get("giveawayFactor"),
 			takeawayFactor: g.get("takeawayFactor"),
 			deflectionFactor: g.get("deflectionFactor"),

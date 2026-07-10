@@ -134,6 +134,8 @@ const gameAttributesKeysSportSpecific = {
 		"hitFactor",
 		"fightFactor",
 		"rfa",
+		"farmSystem",
+		"maxContracts",
 		"giveawayFactor",
 		"takeawayFactor",
 		"blockFactor",
@@ -234,6 +236,8 @@ export const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 	rookieContractLengths: [3, 2],
 	rookiesCanRefuse: true,
 	rfa: false,
+	farmSystem: false,
+	maxContracts: 50,
 
 	pace: 100,
 	threePointers: true,
@@ -464,8 +468,9 @@ export const hockeyOverrides: Partial<GameAttributesLeagueWithHistory> =
 				luxuryPayroll: 90000,
 				minContract: 500,
 				maxContract: 13000,
-				minRosterSize: 24,
-				maxRosterSize: 26,
+				// With the farm system, these are ACTIVE roster limits (NHL 20-23); the org-wide ceiling is maxContracts
+				minRosterSize: 20,
+				maxRosterSize: 23,
 				// Injury rate per player per possession, basically. But it's a little more complicated than that.
 				injuryRate: 1 / 10000,
 				draftType: "nhl2021",
@@ -485,6 +490,8 @@ export const hockeyOverrides: Partial<GameAttributesLeagueWithHistory> =
 				maxOvertimes: wrapFromStart(1),
 				shootoutRounds: wrapFromStart(3),
 				rfa: true,
+				farmSystem: true,
+				maxContracts: 50,
 			}
 		: {};
 

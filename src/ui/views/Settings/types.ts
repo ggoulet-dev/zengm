@@ -140,6 +140,8 @@ export type Key =
 	| "onsideRecoveryFactor"
 	| "fightFactor"
 	| "rfa"
+	| "farmSystem"
+	| "maxContracts"
 	| "giveawayFactor"
 	| "takeawayFactor"
 	| "blockFactor"

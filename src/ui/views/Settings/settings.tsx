@@ -383,6 +383,40 @@ export const settings: Setting[] = (
 			type: "int",
 		},
 		{
+			category: "Teams",
+			key: "farmSystem",
+			name: "Farm System (Minor League)",
+			godModeRequired: "existingLeagueOnly",
+			descriptionLong: (
+				<>
+					NHL-style minor-league system. Each team gets a farm roster: players
+					assigned there don't dress for games, don't count against the active
+					roster limits, and get buried-contract salary cap relief (only the
+					portion of their salary above the relief threshold counts against the
+					cap). Drafted players are assigned to the farm automatically. A player
+					can only be sent down if he's waiver-exempt (25 or younger, or fewer
+					than 160 career games) — veterans can't be buried. With this enabled,
+					the roster size limits above apply to the active roster only, and the
+					whole organization is limited by Max Contracts.
+				</>
+			),
+			type: "bool",
+		},
+		{
+			category: "Teams",
+			key: "maxContracts",
+			name: "Max Contracts Per Organization",
+			godModeRequired: "existingLeagueOnly",
+			description:
+				"With the farm system enabled, the maximum number of players in an organization (active roster + farm), like the NHL's 50-contract limit.",
+			type: "int",
+			validator: (value, output) => {
+				if (value < output.maxRosterSize) {
+					throw new Error("Value cannot be less than max roster size");
+				}
+			},
+		},
+		{
 			category: "Playoffs",
 			key: "numGamesPlayoffSeries",
 			name: "# Playoff Games",

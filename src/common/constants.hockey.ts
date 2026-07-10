@@ -381,3 +381,20 @@ export const NUM_PLAYERS_PER_LINE = {
 	D: 2,
 	G: 1,
 };
+
+// Farm system ("club-école"): buried-contract cap relief, like the NHL's ~$1.15M relief for players in the minors [thousands of dollars]
+export const FARM_CAP_RELIEF = 1150;
+
+// Farm system: AI active-roster targets by dressing group (12F/6D/1G dress, plus spares), C/W collapse into F because dressing operates on forward lines
+export const FARM_ACTIVE_TARGETS = {
+	F: 13,
+	D: 7,
+	G: 2,
+};
+
+// Farm system: simplified waiver exemption — a player can be sent down iff age <= FARM_ELIGIBLE_MAX_AGE or career regular-season NHL games < FARM_ELIGIBLE_MAX_CAREER_GP
+export const FARM_ELIGIBLE_MAX_AGE = 25;
+export const FARM_ELIGIBLE_MAX_CAREER_GP = 160;
+
+// Farm system: AI only promotes a farm player over an active one when his value exceeds the active's by this margin (prevents call-up/send-down oscillation)
+export const FARM_PROMOTE_MARGIN = 6;

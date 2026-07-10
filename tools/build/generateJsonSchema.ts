@@ -1425,6 +1425,12 @@ export const generateJsonSchema = (sport: Sport | "test") => {
 					rfa: {
 						type: "boolean",
 					},
+					farmSystem: {
+						type: "boolean",
+					},
+					maxContracts: {
+						type: "integer",
+					},
 					giveawayFactor: {
 						type: "number",
 					},
@@ -1820,6 +1826,9 @@ export const generateJsonSchema = (sport: Sport | "test") => {
 							required: ["year"],
 						},
 						face: {},
+						farm: {
+							type: "boolean",
+						},
 						firstName: {
 							type: "string",
 						},

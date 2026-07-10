@@ -580,6 +580,8 @@ export type GameAttributesLeague = {
 	elamPoints: number;
 	equalizeRegions: boolean;
 	fantasyPoints?: "standard" | "ppr" | "halfPpr";
+	// Hockey: enables the minor-league ("farm") roster (send down / call up, buried-contract cap relief)
+	farmSystem: boolean;
 	forceRetireAge: number;
 	forceRetireSeasons: number;
 	foulsNeededToFoulOut: number;
@@ -609,6 +611,8 @@ export type GameAttributesLeague = {
 	luxuryTax: number;
 	maxContract: number;
 	maxContractLength: number;
+	// Hockey farm system: max total contracts in the organization (active roster + farm), like the NHL's 50-contract limit
+	maxContracts: number;
 	maxOvertimes: number | null; // null means infinite overtimes (no ties/shootouts)
 	maxOvertimesPlayoffs: number | null; // null means infinite overtimes (no shootouts)
 	maxRosterSize: number;
@@ -1188,6 +1192,8 @@ export type PlayerWithoutKey<PlayerRatings = MinimalPlayerRatings> = {
 		dpid?: number;
 	};
 	face: FaceConfig;
+	// Hockey farm system: player is assigned to the team's minor-league roster (doesn't dress for games, buried-contract cap relief). Like rfaTid, survives the free-agent round trip and is cleared when signing with a new organization.
+	farm?: boolean;
 	firstName: string;
 	gamesUntilTradable: number;
 	hgt: number;
@@ -1508,6 +1514,8 @@ export type ContractInfo = {
 	exp: number;
 	released: boolean;
 	watch: number;
+	// Hockey farm system: player is on the minor-league roster (buried-contract cap relief applies)
+	farm?: boolean;
 };
 
 export type ReleasedPlayerWithoutKey = {
