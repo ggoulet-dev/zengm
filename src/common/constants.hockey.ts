@@ -398,3 +398,21 @@ export const FARM_ELIGIBLE_MAX_CAREER_GP = 160;
 
 // Farm system: AI only promotes a farm player over an active one when his value exceeds the active's by this margin (prevents call-up/send-down oscillation)
 export const FARM_PROMOTE_MARGIN = 6;
+
+// Farm system: abstract AHL stat generation (cosmetic, ratings-derived). A farm player "plays" on days his parent club plays, so expected AHL games scale with numGames.
+export const FARM_STATS_GAME_PROB = 0.85; // skaters: ~70 AHL games over an 82-game parent season
+export const FARM_STATS_GOALIE_GAME_PROB = 0.425; // goalies split an AHL tandem: ~35 starts
+export const FARM_STATS_PPG_BASE = 0.25; // expected AHL points per game at ovr 30
+export const FARM_STATS_PPG_SLOPE = 0.03; // per ovr point above 30 (ovr 55 ≈ 1.0 ppg, an AHL first-liner)
+export const FARM_STATS_PPG_MIN = 0.15;
+export const FARM_STATS_PPG_MAX = 1.5;
+export const FARM_STATS_D_FACTOR = 0.55; // defensemen score less
+export const FARM_STATS_GOAL_SHARE_F = 0.4; // goals vs assists split
+export const FARM_STATS_GOAL_SHARE_D = 0.3;
+// Save percentage curve pinned to this fork's de-saturated glk scale (farm goalies run glk ~30-70) so the AHL league lands around .895-.905
+export const FARM_STATS_SV_BASE = 0.87; // at glk 40
+export const FARM_STATS_SV_SLOPE = 0.0012; // per glk point above 40
+export const FARM_STATS_SV_MIN = 0.875;
+export const FARM_STATS_SV_MAX = 0.935;
+export const FARM_STATS_SHOTS_MIN = 22;
+export const FARM_STATS_SHOTS_MAX = 34;

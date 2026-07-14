@@ -1829,6 +1829,33 @@ export const generateJsonSchema = (sport: Sport | "test") => {
 						farm: {
 							type: "boolean",
 						},
+						farmStats: {
+							type: "array",
+							items: {
+								type: "object",
+								properties: {
+									season: {
+										type: "integer",
+									},
+									gp: {
+										type: "integer",
+									},
+									g: {
+										type: "integer",
+									},
+									a: {
+										type: "integer",
+									},
+									sv: {
+										type: "integer",
+									},
+									ga: {
+										type: "integer",
+									},
+								},
+								required: ["season", "gp", "g", "a"],
+							},
+						},
 						firstName: {
 							type: "string",
 						},

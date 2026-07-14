@@ -1194,6 +1194,15 @@ export type PlayerWithoutKey<PlayerRatings = MinimalPlayerRatings> = {
 	face: FaceConfig;
 	// Hockey farm system: player is assigned to the team's minor-league roster (doesn't dress for games, buried-contract cap relief). Like rfaTid, survives the free-agent round trip and is cleared when signing with a new organization.
 	farm?: boolean;
+	// Hockey farm system: abstract per-season AHL stat lines (cosmetic, ratings-derived — never real stats rows, never read by AI or the development math beyond gp). History like injuries: never cleared, travels through trades.
+	farmStats?: {
+		season: number;
+		gp: number;
+		g: number;
+		a: number;
+		sv?: number;
+		ga?: number;
+	}[];
 	firstName: string;
 	gamesUntilTradable: number;
 	hgt: number;

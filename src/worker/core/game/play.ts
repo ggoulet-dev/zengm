@@ -38,6 +38,8 @@ import type {
 import allowForceTie from "../../../common/allowForceTie.ts";
 import getWinner from "../../../common/getWinner.ts";
 import { setLiveSimRatingsStatsPopoverPlayers } from "./setLiveSimRatingsStatsPopoverPlayers.ts";
+import { farmEnabled, isOnFarm } from "../team/farm.hockey.ts";
+import { accrueFarmGameDay } from "../player/farmStats.hockey.ts";
 import {
 	getOneUpcomingGame,
 	recomputeLocalUITeamOvrs,
@@ -180,6 +182,20 @@ const play = async (
 
 			const healedTexts: string[] = [];
 
+			// Farm players "play" an abstract AHL game on days their parent club plays, so expected AHL games track numGames regardless of how the schedule packs days
+			const doFarmStats =
+				farmEnabled() &&
+				(g.get("phase") === PHASE.REGULAR_SEASON ||
+					g.get("phase") === PHASE.AFTER_TRADE_DEADLINE);
+			const tidsPlayedToday = new Set<number>();
+			if (doFarmStats) {
+				for (const result of results) {
+					// All-Star Game ids (-1/-2) never match a real tid, harmless
+					tidsPlayedToday.add(result.team[0].id);
+					tidsPlayedToday.add(result.team[1].id);
+				}
+			}
+
 			// Injury countdown - This must be after games are saved, of there is a race condition involving new injury assignment in writeStats. Free agents are handled in decreaseDemands.
 			const players = await idb.cache.players.indexGetAll("playersByTid", [
 				0,
@@ -188,6 +204,16 @@ const play = async (
 
 			for (const p of players) {
 				let changed = false;
+
+				if (
+					doFarmStats &&
+					isOnFarm(p) &&
+					p.injury.gamesRemaining === 0 &&
+					tidsPlayedToday.has(p.tid) &&
+					accrueFarmGameDay(p)
+				) {
+					changed = true;
+				}
 
 				if (p.injury.gamesRemaining > 0) {
 					p.injury.gamesRemaining -= 1;
