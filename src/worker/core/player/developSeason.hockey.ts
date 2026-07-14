@@ -207,6 +207,8 @@ const developSeason = (
 	ratings: PlayerRatings,
 	age: number,
 	coachingLevel: number,
+	// Usage-conditioned development (see usageDevModifier.hockey.ts): scales the POSITIVE component only, so misuse dampens growth (including breakout tails) but never accelerates decline. Always <= 1, so it can't escape changeLimits. Default 1 keeps every other call site bit-identical (same RNG call order and count).
+	usageModifier: number = 1,
 ) => {
 	// In young players, height can sometimes increase
 	if (age <= 21) {
@@ -228,11 +230,14 @@ const developSeason = (
 		const ageModifier = ratingsFormulas[key].ageModifier(age);
 		const changeLimits = ratingsFormulas[key].changeLimits(age);
 
+		const growth = baseChange + ageModifier;
+		const scaledGrowth = growth > 0 ? growth * usageModifier : growth;
+
 		ratings[key] = limitRating(
 			ratings[key] +
 				posCoeff *
 					helpers.bound(
-						(baseChange + ageModifier) * uniform(0.2, 1.2),
+						scaledGrowth * uniform(0.2, 1.2),
 						changeLimits[0],
 						changeLimits[1],
 					),

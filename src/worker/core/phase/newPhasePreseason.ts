@@ -413,9 +413,17 @@ const newPhasePreseason = async (
 			p.transactions = [];
 			p.born.year += 1;
 		} else {
-			// Update ratings
+			// Update ratings. Last season's usage (bench rot, AHL stagnation) dampens positive development — see usageDevModifier.hockey.ts
 			player.addRatingsRow(p, scoutingLevel);
-			await player.develop(p, 1, false, coachingLevels[p.tid]);
+			const usageModifier = player.getUsageDevModifier(p);
+			await player.develop(
+				p,
+				1,
+				false,
+				coachingLevels[p.tid],
+				false,
+				usageModifier,
+			);
 		}
 
 		if (

@@ -135,6 +135,7 @@ const develop = async (
 	newPlayer: boolean = false,
 	coachingLevel: number = DEFAULT_LEVEL,
 	skipPot: boolean = false, // Only for making testing or core/debug faster
+	usageModifier: number = 1, // Hockey only, passed by the annual preseason develop (see usageDevModifier.hockey.ts)
 ) => {
 	const ratings = last(p.ratings);
 	let age = ratings.season - p.born.year;
@@ -146,7 +147,14 @@ const develop = async (
 		}
 
 		if (!ratings.locked) {
-			await developSeason(ratings, age, p.srID, coachingLevel, false);
+			await developSeason(
+				ratings,
+				age,
+				p.srID,
+				coachingLevel,
+				false,
+				usageModifier,
+			);
 		}
 	}
 

@@ -22,6 +22,7 @@ import genWeight from "./genWeight.ts";
 import generate from "./generate.ts";
 import getLeaders from "../player/getLeaders.ts";
 import getPlayerFakeAge from "./getPlayerFakeAge.ts";
+import getUsageDevModifier from "./usageDevModifier.hockey.ts";
 import heightToRating from "./heightToRating.ts";
 import injury from "./injury.ts";
 import killOne from "./killOne.ts";
@@ -71,6 +72,7 @@ export default {
 	generate,
 	getLeaders,
 	getPlayerFakeAge,
+	getUsageDevModifier,
 	heightToRating,
 	injury,
 	killOne,

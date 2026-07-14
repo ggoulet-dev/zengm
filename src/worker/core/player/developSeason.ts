@@ -19,12 +19,19 @@ const developSeason = async (
 	srID: string | undefined,
 	coachingLevel: number,
 	forPot: boolean,
+	// Hockey only: usage-conditioned development penalty (see usageDevModifier.hockey.ts)
+	usageModifier: number = 1,
 ) => {
 	bySport({
 		baseball: developSeasonBaseball(ratings as any, age, coachingLevel),
 		basketball: developSeasonBasketball(ratings as any, age, coachingLevel),
 		football: developSeasonFootball(ratings as any, age, coachingLevel),
-		hockey: developSeasonHockey(ratings as any, age, coachingLevel),
+		hockey: developSeasonHockey(
+			ratings as any,
+			age,
+			coachingLevel,
+			usageModifier,
+		),
 	});
 
 	if (!isSport("basketball") || !Object.hasOwn(g, "realPlayerDeterminism")) {

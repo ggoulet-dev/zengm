@@ -399,6 +399,16 @@ export const FARM_ELIGIBLE_MAX_CAREER_GP = 160;
 // Farm system: AI only promotes a farm player over an active one when his value exceeds the active's by this margin (prevents call-up/send-down oscillation)
 export const FARM_PROMOTE_MARGIN = 6;
 
+// Farm system: usage-conditioned development, penalties only — correct usage (NHL regular, prospect getting AHL minutes) is always ×1.0. Applied to the POSITIVE development component only; decline is never touched. All games thresholds are fractions of numGames, scaled by injury-adjusted availability.
+export const FARM_DEV_BENCH_ROT = 0.85; // young player riding the NHL bench/pressbox instead of playing
+export const FARM_DEV_STAGNATION_MILD = 0.9; // first stagnation year in the minors
+export const FARM_DEV_STAGNATION = 0.8; // entrenched AHL stagnation
+export const FARM_DEV_INJURY_EXCUSE_FRAC = 0.25; // below this fraction of the season available -> always neutral
+export const FARM_DEV_PARTICIPATION_FRAC = 0.5; // (NHL gp + AHL gp)/available below this = didn't play enough
+export const FARM_DEV_BENCH_AMIN = 10; // average TOI floor for a real NHL role
+export const FARM_DEV_NHL_ROLE_FRAC = 0.25; // NHL gp/available at/above this = real NHL role (also escapes farm stagnation)
+export const FARM_DEV_GOALIE_ROT_GP_FRAC = 12 / 82; // third-string goalie threshold
+
 // Farm system: abstract AHL stat generation (cosmetic, ratings-derived). A farm player "plays" on days his parent club plays, so expected AHL games scale with numGames.
 export const FARM_STATS_GAME_PROB = 0.85; // skaters: ~70 AHL games over an 82-game parent season
 export const FARM_STATS_GOALIE_GAME_PROB = 0.425; // goalies split an AHL tandem: ~35 starts
