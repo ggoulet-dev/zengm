@@ -55,6 +55,13 @@ export const makeMatchups = (
 	numPlayoffTeams: number,
 	numPlayoffByes: number,
 ) => {
+	// validatePlayoffSettings checks numActiveTeams, but teams without a season row (like from a league file whose team "seasons" entries don't match startingSeason) are silently dropped by teamsPlus — fail with an actionable message rather than an undefined crash while seeding
+	if (teams.length < numPlayoffTeams) {
+		throw new Error(
+			`The playoff bracket needs ${numPlayoffTeams} teams, but only ${teams.length} have data for this season. If this league was created from a league file, check that the seasons in each team's "seasons" property match the file's startingSeason.`,
+		);
+	}
+
 	const seeds = genPlayoffSeeds(numPlayoffTeams, numPlayoffByes);
 
 	const round = seeds.map((matchup) => {
