@@ -182,6 +182,7 @@ const updateRoster = async (
 			"tid",
 			"draft",
 			"farm",
+			"farmStats",
 			"firstName",
 			"lastName",
 			"age",
@@ -295,6 +296,23 @@ const updateRoster = async (
 					g.get("phase") !== PHASE.EXPANSION_DRAFT
 						? (canSendDownByPid.get(p.pid) ?? false)
 						: false;
+
+				if (farmSystem && p.farm) {
+					// Current-season abstract AHL line for the Minors table
+					const row = p.farmStats?.find(
+						(r: { season: number }) => r.season === g.get("season"),
+					);
+					p.farmStatsRow = {
+						gp: row?.gp ?? 0,
+						g: row?.g ?? 0,
+						a: row?.a ?? 0,
+						pts: (row?.g ?? 0) + (row?.a ?? 0),
+						svPct:
+							row?.sv !== undefined
+								? helpers.ratio(row.sv, row.sv + (row.ga ?? 0))
+								: undefined,
+					};
+				}
 
 				// Convert ptModifier to string so it doesn't cause unneeded knockout re-rendering
 				p.ptModifier = String(p.ptModifier);

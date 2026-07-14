@@ -296,6 +296,11 @@ const Roster = ({
 					"Pot",
 					"Contract",
 					"Country",
+					"stat:gp",
+					"stat:g",
+					"stat:a",
+					"stat:pts",
+					"stat:svPct",
 					...(showMood ? ["Mood"] : []),
 					...(showFarmActions ? ["Call Up"] : []),
 					...(showRelease ? ["Release"] : []),
@@ -360,6 +365,13 @@ const Roster = ({
 					sortValue: p.born.loc,
 					searchValue: p.born.loc,
 				},
+				p.farmStatsRow?.gp ?? 0,
+				p.farmStatsRow?.g ?? 0,
+				p.farmStatsRow?.a ?? 0,
+				p.farmStatsRow?.pts ?? 0,
+				p.farmStatsRow?.svPct !== undefined
+					? helpers.roundStat(p.farmStatsRow.svPct, "svPct")
+					: null,
 				...(showMood
 					? [
 							wrappedMood({
