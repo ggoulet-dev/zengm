@@ -29,6 +29,8 @@ const makeProject = (
 
 		test: {
 			...projectConfig,
+			// define() sets process.env.SPORT on the main process, so the last project wins for all; env is per project
+			env: { SPORT: sport },
 			setupFiles:
 				environment === "node"
 					? ["./src/test/setup.ts", "./src/worker/index.ts"]

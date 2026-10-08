@@ -6,6 +6,7 @@ import {
 import developSeason from "./developSeason.ts";
 import ovr from "./ovr.ts";
 import pos from "./pos.ts";
+import { samePositionGroup } from "./pos.hockey.ts";
 import skills from "./skills.ts";
 import { g, helpers } from "../../util/index.ts";
 import type {
@@ -22,13 +23,12 @@ import { last } from "../../../common/utils.ts";
 const NUM_SIMULATIONS = 20; // Higher is more accurate, but slower. Low accuracy is fine, though!
 
 // Upper bound for a projected potential. Must stay in sync with the per-sport
-// ovr cap (see ovr.SPORT.ts). Hockey lets dominant players exceed 100, so its
-// potential ceiling is raised to match.
+// ovr cap (see ovr.SPORT.ts); hockey clamps ovr at 99.
 const MAX_POT = bySport({
 	baseball: 100,
 	basketball: 100,
 	football: 100,
-	hockey: 125,
+	hockey: 99,
 });
 
 // Repeatedly simulate aging up to 29, and pick the 75th percentile max
@@ -178,10 +178,14 @@ const develop = async (
 			let pos;
 			let maxOvr = -Infinity; // A player can never have KR or PR as his main position
 
+			const eligible = (pos2: string) =>
+				!NOT_REAL_POSITIONS.has(pos2) &&
+				(!isSport("hockey") || samePositionGroup(pos2, ratings.pos));
+
 			ratings.ovrs = POSITIONS.reduce((ovrs, pos2) => {
 				ovrs[pos2] = ovr(ratings, pos2);
 
-				if (!NOT_REAL_POSITIONS.has(pos2) && ovrs[pos2] > maxOvr) {
+				if (eligible(pos2) && ovrs[pos2] > maxOvr) {
 					pos = pos2;
 					maxOvr = ovrs[pos2];
 				}

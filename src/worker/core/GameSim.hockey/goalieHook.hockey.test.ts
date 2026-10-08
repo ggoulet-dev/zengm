@@ -27,6 +27,8 @@ const forceGoalie = async (p: any, glk: number) => {
 		}
 	}
 	ratings.glk = glk;
+	// Position is explicit, like a God Mode edit: develop never moves a skater to G
+	ratings.pos = "G";
 	await player.develop(p, 0, false, DEFAULT_LEVEL, true);
 };
 

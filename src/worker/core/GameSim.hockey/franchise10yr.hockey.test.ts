@@ -19,6 +19,7 @@
 //   npx vitest run --project hockey --disableConsoleIntercept \
 //     src/worker/core/GameSim.hockey/franchise10yr.hockey.test.ts
 // Point NHL_ROSTER at a different export to validate another roster.
+// NHL_SEASONS=20 runs a longer horizon (default 10).
 
 import { assert, test } from "vitest";
 import GameSim from "./index.ts";
@@ -32,12 +33,11 @@ import develop from "../player/develop.ts";
 
 // This test lives under src/worker (web tsconfig, no node types), but runs in vitest's node
 // environment, so node APIs are reached dynamically to keep `tsc --build` clean.
-const DEFAULT_ROSTER =
-	"nhl-rosters/NHL_2025-2026_Post-Deadline_Rosters_v2.json";
+const DEFAULT_ROSTER = "nhl-rosters/NHL_2026-2027_Opening_Rosters_v1.json";
 
-const NUM_SEASONS = 10;
+const DEFAULT_NUM_SEASONS = 10;
 const ROUNDS_PER_SEASON = 82; // each team plays 82 games via the circle method
-const START_SEASON = 2025;
+const START_SEASON = 2026;
 
 const mulberry32 = (seed: number) => {
 	let a = seed;
@@ -78,11 +78,13 @@ const finalizeForSim = (p: any, season: number) => {
 
 const ageOf = (p: any, season: number) => season - p.born.year;
 
-test("10-year franchise stays NHL-realistic", async () => {
+test("multi-year franchise stays NHL-realistic", async () => {
 	// Non-literal specifier so the web tsconfig doesn't try to resolve node's built-in module
 	const fsSpecifier = "node:fs";
 	const fs: any = await import(fsSpecifier);
-	const ROSTER = (globalThis as any).process?.env?.NHL_ROSTER ?? DEFAULT_ROSTER;
+	const env = (globalThis as any).process?.env ?? {};
+	const ROSTER = env.NHL_ROSTER ?? DEFAULT_ROSTER;
+	const NUM_SEASONS = Number(env.NHL_SEASONS) || DEFAULT_NUM_SEASONS;
 	if (!fs.existsSync(ROSTER)) {
 		console.log(`roster file not found (${ROSTER}); skipping franchise test`);
 		return;
@@ -152,6 +154,7 @@ test("10-year franchise stays NHL-realistic", async () => {
 			norrisName: string;
 			norrisIsD: boolean;
 			meanOvr: number;
+			dShare: number;
 			topTeamPts: number;
 			botTeamPts: number;
 			champTid: number;
@@ -320,6 +323,8 @@ test("10-year franchise stays NHL-realistic", async () => {
 
 			const meanOvr =
 				active.reduce((sum, p) => sum + lastR(p).ovr, 0) / active.length;
+			const dShare =
+				active.filter((p) => lastR(p).pos === "D").length / active.length;
 
 			const sortedPts = tids
 				.map((tid) => points[tid]!)
@@ -343,6 +348,7 @@ test("10-year franchise stays NHL-realistic", async () => {
 				norrisName: norris.name,
 				norrisIsD: norris.pos === "D",
 				meanOvr,
+				dShare,
 				topTeamPts: sortedPts[0]!,
 				botTeamPts: sortedPts.at(-1)!,
 				champTid,
@@ -421,7 +427,7 @@ test("10-year franchise stays NHL-realistic", async () => {
 
 		// ---------- Report ----------
 		console.log(
-			"\nYr  Goals SOG  Sh%   SV%   PP%  PIM  Hit  Blk  OT%  | TopScorer            Pts  bGoalieSV  Norris(D)           | mOvr  Best-Worst",
+			"\nYr  Goals SOG  Sh%   SV%   PP%  PIM  Hit  Blk  OT%  | TopScorer            Pts  bGoalieSV  Norris(D)           | mOvr  D%   Best-Worst",
 		);
 		for (const y of report) {
 			console.log(
@@ -436,7 +442,9 @@ test("10-year franchise stays NHL-realistic", async () => {
 				).padStart(3)}  ${fmt(y.bestGoalieSv, 3)}      ${(y.norrisIsD
 					? y.norrisName
 					: `!! ${y.norrisName}`
-				).padEnd(18)} | ${fmt(y.meanOvr, 1)}  ${y.topTeamPts}-${y.botTeamPts}`,
+				).padEnd(
+					18,
+				)} | ${fmt(y.meanOvr, 1)}  ${fmt(100 * y.dShare, 0)}%  ${y.topTeamPts}-${y.botTeamPts}`,
 			);
 		}
 
@@ -462,6 +470,9 @@ test("10-year franchise stays NHL-realistic", async () => {
 				20,
 				`${y.season} standings too compressed`,
 			);
+			// Generated classes must keep feeding real defensemen
+			assert.isAbove(y.dShare, 0.25, `${y.season} too few defensemen`);
+			assert.isBelow(y.dShare, 0.4, `${y.season} too many defensemen`);
 		}
 
 		// No systematic drift: year-10 scoring & goaltending close to year-1
@@ -480,4 +491,4 @@ test("10-year franchise stays NHL-realistic", async () => {
 	} finally {
 		Math.random = origRandom;
 	}
-}, 600000);
+}, 3_600_000);
